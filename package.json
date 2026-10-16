@@ -1,6 +1,14 @@
-﻿{
+{
   "name": "finora",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@12.6.0"
+  "packageManager": "pnpm@12.6.0",
+  "scripts": {
+    "build": "pnpm --filter @finora/web build",
+    "typecheck": "pnpm --filter @finora/web typecheck",
+    "lint": "pnpm --filter @finora/web lint",
+    "test": "pnpm run test:unit && pnpm run test:e2e",
+    "test:unit": "pnpm --filter @finora/web test:unit",
+    "test:e2e": "pnpm --filter @finora/web build && pnpm --filter @finora/web test:e2e"
+  }
 }
