@@ -1,9 +1,99 @@
 import { expect, test } from "@playwright/test";
 
-test("home page renders the application shell", async ({ page }) => {
+test("home page renders the Persian application shell", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  const html = page.locator("html");
+  await expect(html).toHaveAttribute("lang", "fa");
+  await expect(html).toHaveAttribute("dir", "rtl");
+  await expect(html).toHaveAttribute("data-theme", "light");
+
+  await expect(page.getByRole("banner")).toBeVisible();
   await expect(page.getByRole("main")).toBeVisible();
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "داشبورد" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "ناوبری اصلی" }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "داشبورد" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(page.getByRole("main")).toHaveCSS("direction", "rtl");
+});
+
+test("skip link is the first control and moves to the main content", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  await page.keyboard.press("Tab");
+  const skipLink = page.getByRole("link", { name: "پرش به محتوای اصلی" });
+  await expect(skipLink).toBeFocused();
+
+  await skipLink.press("Enter");
+  await expect(page).toHaveURL(/#main-content$/);
+});
+
+test("theme toggle applies and survives a reload", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+  const toggle = page.getByRole("button", { name: "حالت تیره" });
+  await toggle.click();
+
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.getByRole("button", { name: "حالت تیره" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+});
+
+test("dark theme switches the rendered surface colours", async ({ page }) => {
+  await page.goto("/");
+
+  const bodyBackground = () =>
+    page
+      .locator("body")
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+
+  const light = await bodyBackground();
+  await page.getByRole("button", { name: "حالت تیره" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+  expect(await bodyBackground()).not.toBe(light);
+});
+
+test("mobile navigation opens with the menu button and closes on Escape", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  await expect(page.locator("aside")).toBeHidden();
+
+  const panel = page.locator("#mobile-nav");
+  await expect(panel).toBeHidden();
+
+  await page.getByRole("button", { name: "باز کردن منو" }).click();
+
+  await expect(panel).toBeVisible();
+  await expect(page.getByRole("button", { name: "بستن منو" })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(
+    page.getByRole("navigation", { name: "ناوبری موبایل" }),
+  ).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "باز کردن منو" }),
+  ).toHaveAttribute("aria-expanded", "false");
 });
