@@ -23,6 +23,33 @@ test("home page renders the Persian application shell", async ({ page }) => {
   await expect(page.getByRole("main")).toHaveCSS("direction", "rtl");
 });
 
+test("light theme exposes the approved brand palette through semantic tokens", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  // Off White background.
+  await expect(page.locator("body")).toHaveCSS(
+    "background-color",
+    "rgb(245, 245, 247)",
+  );
+
+  // Burgundy for brand emphasis and the active navigation item.
+  await expect(page.locator("aside").getByText("فینورا")).toHaveCSS(
+    "color",
+    "rgb(75, 20, 38)",
+  );
+  await expect(page.getByRole("link", { name: "داشبورد" })).toHaveCSS(
+    "color",
+    "rgb(75, 20, 38)",
+  );
+
+  // Champagne Gold accent, used only for the decorative logo mark.
+  await expect(
+    page.locator('aside span[aria-hidden="true"]').first(),
+  ).toHaveCSS("background-color", "rgb(184, 138, 90)");
+});
+
 test("skip link is the first control and moves to the main content", async ({
   page,
 }) => {
@@ -54,8 +81,14 @@ test("theme toggle applies and survives a reload", async ({ page }) => {
   );
 });
 
-test("dark theme switches the rendered surface colours", async ({ page }) => {
+test("dark theme uses the Near Black foundation with a lightened burgundy", async ({
+  page,
+}) => {
   await page.goto("/");
+  await expect(page.locator("body")).toHaveCSS(
+    "background-color",
+    "rgb(245, 245, 247)",
+  );
 
   const bodyBackground = () =>
     page
@@ -67,6 +100,18 @@ test("dark theme switches the rendered surface colours", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
   expect(await bodyBackground()).not.toBe(light);
+
+  // Near Black foundation.
+  await expect(page.locator("body")).toHaveCSS(
+    "background-color",
+    "rgb(25, 25, 25)",
+  );
+
+  // Burgundy is lightened in the dark theme so it stays visible on Near Black.
+  await expect(page.getByRole("link", { name: "داشبورد" })).toHaveCSS(
+    "color",
+    "rgb(201, 139, 164)",
+  );
 });
 
 test("mobile navigation opens with the menu button and closes on Escape", async ({

@@ -10,7 +10,7 @@ export function Brand({ className, compact = false }: BrandProps) {
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
       <span
-        className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground"
+        className="flex size-8 items-center justify-center rounded-md bg-accent text-accent-foreground"
         aria-hidden="true"
       >
         <svg
@@ -28,7 +28,7 @@ export function Brand({ className, compact = false }: BrandProps) {
         </svg>
       </span>
       {!compact && (
-        <span className="text-lg font-bold tracking-tight text-foreground">
+        <span className="text-lg font-bold tracking-tight text-primary">
           فینورا
         </span>
       )}

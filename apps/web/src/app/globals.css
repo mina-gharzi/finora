@@ -3,10 +3,21 @@
 /*
  * Finora design tokens.
  *
+ * Brand palette (approved):
+ *   Burgundy      #4B1426  — primary actions, active navigation, brand emphasis
+ *   Off White     #F5F5F7  — light theme background
+ *   Near Black    #191919  — primary text, dark theme foundation
+ *   Champagne Gold #B88A5A — restrained decorative accent only
+ *
  * The semantic tokens below are the single source of truth for colour. They are
  * plain CSS custom properties so both the light and dark themes expose the exact
  * same names. Components must reference the semantic utilities (e.g. `bg-surface`,
- * `text-muted-foreground`, `border-border`) instead of hardcoded colours.
+ * `text-muted-foreground`, `border-border`, `bg-accent`) instead of hardcoded
+ * colours; no component carries a brand hex value.
+ *
+ * Values beyond the four brand colours are derived only where necessary
+ * (surfaces, borders, hover, muted text, disabled) or kept semantically distinct
+ * (success/warning/danger/info are intentionally NOT brand-coloured).
  *
  * The theme is driven by a `data-theme` attribute on <html> ("light" | "dark"),
  * which is applied before first paint by an inline script in the root layout so
@@ -20,24 +31,28 @@
   color-scheme: light;
 
   /* Surfaces */
-  --background: #f4f6fa;
+  --background: #f5f5f7;
   --surface: #ffffff;
-  --surface-muted: #f1f5f9;
+  --surface-muted: #ececef;
   --surface-raised: #ffffff;
 
   /* Borders */
-  --border: #e2e8f0;
-  --border-strong: #cbd5e1;
+  --border: #e4e4e9;
+  --border-strong: #8a8a94;
 
   /* Text */
-  --foreground: #0f172a;
-  --muted-foreground: #64748b;
+  --foreground: #191919;
+  --muted-foreground: #5f5f6a;
 
-  /* Primary action */
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
+  /* Primary action (Burgundy) */
+  --primary: #4b1426;
+  --primary-hover: #5e1b31;
   --primary-foreground: #ffffff;
-  --primary-subtle: #eff6ff;
+  --primary-subtle: #f6ebef;
+
+  /* Accent (Champagne Gold) — decorative emphasis only, never a status colour */
+  --accent: #b88a5a;
+  --accent-foreground: #191919;
 
   /* Status: success */
   --success: #15803d;
@@ -50,7 +65,7 @@
   --warning-subtle: #fffbeb;
 
   /* Status: danger */
-  --danger: #dc2626;
+  --danger: #c81e1e;
   --danger-foreground: #ffffff;
   --danger-subtle: #fef2f2;
 
@@ -60,33 +75,37 @@
   --info-subtle: #f0f9ff;
 
   /* Focus + disabled */
-  --ring: #2563eb;
-  --disabled: #f1f5f9;
-  --disabled-foreground: #94a3b8;
+  --ring: #4b1426;
+  --disabled: #e8e8ec;
+  --disabled-foreground: #8c8c96;
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
 
-  /* Surfaces */
-  --background: #0b1120;
-  --surface: #111827;
-  --surface-muted: #1e293b;
-  --surface-raised: #1e293b;
+  /* Surfaces (foundation: Near Black) */
+  --background: #191919;
+  --surface: #212121;
+  --surface-muted: #2a2a2a;
+  --surface-raised: #262626;
 
   /* Borders */
-  --border: #1f2937;
-  --border-strong: #334155;
+  --border: #333333;
+  --border-strong: #6e6e78;
 
   /* Text */
-  --foreground: #e5e7eb;
-  --muted-foreground: #94a3b8;
+  --foreground: #f5f5f7;
+  --muted-foreground: #9a9aa6;
 
-  /* Primary action */
-  --primary: #3b82f6;
-  --primary-hover: #60a5fa;
-  --primary-foreground: #071022;
-  --primary-subtle: #172554;
+  /* Primary action (Burgundy, lightened for contrast on Near Black) */
+  --primary: #c98ba4;
+  --primary-hover: #d9a0b4;
+  --primary-foreground: #191919;
+  --primary-subtle: #34202a;
+
+  /* Accent (Champagne Gold) — decorative emphasis only, never a status colour */
+  --accent: #b88a5a;
+  --accent-foreground: #191919;
 
   /* Status: success */
   --success: #4ade80;
@@ -109,9 +128,9 @@
   --info-subtle: #082f49;
 
   /* Focus + disabled */
-  --ring: #60a5fa;
-  --disabled: #1e293b;
-  --disabled-foreground: #64748b;
+  --ring: #b88a5a;
+  --disabled: #2a2a2a;
+  --disabled-foreground: #6e6e78;
 }
 
 @theme inline {
@@ -130,6 +149,9 @@
   --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-subtle: var(--primary-subtle);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
 
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
@@ -156,9 +178,9 @@
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
 
-  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.06);
-  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.1);
-  --shadow-lg: 0 12px 32px -8px rgb(15 23 42 / 0.18);
+  --shadow-sm: 0 1px 2px 0 rgb(25 25 25 / 0.06);
+  --shadow-md: 0 4px 12px -2px rgb(25 25 25 / 0.1);
+  --shadow-lg: 0 12px 32px -8px rgb(25 25 25 / 0.18);
 
   --font-sans: var(--font-pinar), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
