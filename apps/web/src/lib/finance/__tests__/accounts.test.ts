@@ -143,23 +143,42 @@ describe("findAccountForUser", () => {
 });
 
 describe("deleteAccount", () => {
-  it("deletes an account owned by the user", async () => {
-    h.state.selectQueue = [[accountRow()]];
+  it("deletes an account owned by the user when it has no transactions", async () => {
+    h.state.selectQueue = [[accountRow()], [{ value: 0 }]];
 
-    await expect(deleteAccount(OWNER, ACCOUNT_ID)).resolves.toBe(true);
+    await expect(deleteAccount(OWNER, ACCOUNT_ID)).resolves.toEqual({
+      ok: true,
+    });
     expect(h.state.deleteCalls).toBe(1);
   });
 
   it("never deletes another user's account", async () => {
     h.state.selectQueue = [[accountRow({ userId: OTHER })]];
 
-    await expect(deleteAccount(OWNER, ACCOUNT_ID)).resolves.toBe(false);
+    await expect(deleteAccount(OWNER, ACCOUNT_ID)).resolves.toEqual({
+      ok: false,
+      reason: "not_found",
+    });
     expect(h.state.deleteCalls).toBe(0);
   });
 
-  it("returns false for a missing account", async () => {
+  it("returns a not-found result for a missing account", async () => {
     h.state.selectQueue = [[]];
-    await expect(deleteAccount(OWNER, ACCOUNT_ID)).resolves.toBe(false);
+    await expect(deleteAccount(OWNER, ACCOUNT_ID)).resolves.toEqual({
+      ok: false,
+      reason: "not_found",
+    });
+    expect(h.state.deleteCalls).toBe(0);
+  });
+
+  it("refuses to delete an account that still has transactions", async () => {
+    h.state.selectQueue = [[accountRow()], [{ value: 3 }]];
+
+    await expect(deleteAccount(OWNER, ACCOUNT_ID)).resolves.toEqual({
+      ok: false,
+      reason: "has_transactions",
+      transactionCount: 3,
+    });
     expect(h.state.deleteCalls).toBe(0);
   });
 });

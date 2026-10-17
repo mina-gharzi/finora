@@ -1,7 +1,7 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { count, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { accounts, type AccountRow } from "@/db/schema";
+import { accounts, transactions, type AccountRow } from "@/db/schema";
 import { toFieldErrors } from "../validation";
 import { accountInputSchema } from "./validation";
 
@@ -13,9 +13,10 @@ import { accountInputSchema } from "./validation";
  * are always scoped to that owner, so one user can never observe or mutate
  * another user's accounts.
  *
- * Deletion semantics: deleting an account hard-deletes it and, through the
- * `ON DELETE cascade` foreign key, also deletes the transactions that belong to
- * it. Categories are unaffected.
+ * Deletion semantics: deletion is deliberately guarded. The `transactions`
+ * foreign key would cascade and silently wipe an account's transaction history,
+ * so `deleteAccount` refuses to delete any account that still has transactions.
+ * Only empty accounts are removed. Categories are never affected.
  */
 
 export type CreateAccountResult =
@@ -70,21 +71,42 @@ export async function findAccountForUser(
   return row;
 }
 
+export async function countTransactionsForAccount(
+  accountId: string,
+): Promise<number> {
+  const [row] = await getDb()
+    .select({ value: count() })
+    .from(transactions)
+    .where(eq(transactions.accountId, accountId));
+
+  return row?.value ?? 0;
+}
+
+export type DeleteAccountResult =
+  | { ok: true }
+  | { ok: false; reason: "not_found" }
+  | { ok: false; reason: "has_transactions"; transactionCount: number };
+
 /**
- * Deletes an account owned by `userId` (and, by cascade, its transactions).
- * Returns false when the account does not exist or belongs to another user.
+ * Deletes an account owned by `userId`. Accounts that still contain transactions
+ * are not deleted (to avoid silently wiping financial history). Deletion returns
+ * a rich result so callers can present an appropriate message.
  */
 export async function deleteAccount(
   userId: string,
   accountId: string,
-): Promise<boolean> {
-  // Authorize first (shared ownership guard), then delete by id. A foreign id
-  // is never loaded, so it can never be deleted.
+): Promise<DeleteAccountResult> {
+  // Authorize first (shared ownership guard), then inspect and delete by id.
   const account = await findAccountForUser(accountId, userId);
   if (!account) {
-    return false;
+    return { ok: false, reason: "not_found" };
+  }
+
+  const transactionCount = await countTransactionsForAccount(accountId);
+  if (transactionCount > 0) {
+    return { ok: false, reason: "has_transactions", transactionCount };
   }
 
   await getDb().delete(accounts).where(eq(accounts.id, accountId));
-  return true;
+  return { ok: true };
 }

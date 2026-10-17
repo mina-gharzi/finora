@@ -44,7 +44,12 @@ export const navGroups: { title: string; items: NavEntry[] }[] = [
         icon: <TransactionsIcon />,
         disabled: true,
       },
-      { key: "accounts", label: "حساب‌ها", icon: <WalletIcon />, disabled: true },
+      {
+        key: "accounts",
+        label: "حساب‌ها",
+        href: "/accounts",
+        icon: <WalletIcon />,
+      },
       { key: "budgets", label: "بودجه‌ها", icon: <BudgetIcon />, disabled: true },
       { key: "reports", label: "گزارش‌ها", icon: <ReportsIcon />, disabled: true },
     ],

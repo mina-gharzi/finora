@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
   },
   cacheComponents: true,
   partialPrefetching: true,
+  transpilePackages: ["@finora/shared"],
   turbopack: {
   rules: {
       "*.css": {
