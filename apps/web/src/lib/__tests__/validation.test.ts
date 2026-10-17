@@ -92,3 +92,31 @@ describe("loginSchema", () => {
     ).toBe(true);
   });
 });
+
+describe("password byte limit (bcrypt truncates at 72 bytes)", () => {
+  it("accepts exactly 72 ASCII bytes and rejects 73", () => {
+    const ok = "a1" + "b".repeat(70);
+    expect(passwordSchema.safeParse(ok).success).toBe(true);
+    expect(passwordSchema.safeParse(ok + "b").success).toBe(false);
+  });
+
+  it("counts Persian letters as two bytes each", () => {
+    // 'a1' (2 bytes) + 35 Persian letters (70 bytes) = 72 bytes -> accepted
+    expect(passwordSchema.safeParse("a1" + "ب".repeat(35)).success).toBe(true);
+    // 36 Persian letters = 74 bytes although only 38 characters -> rejected
+    expect(passwordSchema.safeParse("a1" + "ب".repeat(36)).success).toBe(false);
+  });
+});
+
+describe("loginSchema length cap", () => {
+  it("accepts long legacy passwords but rejects absurd payloads", () => {
+    expect(
+      loginSchema.safeParse({ email: "a@b.com", password: "x".repeat(256) })
+        .success,
+    ).toBe(true);
+    expect(
+      loginSchema.safeParse({ email: "a@b.com", password: "x".repeat(257) })
+        .success,
+    ).toBe(false);
+  });
+});

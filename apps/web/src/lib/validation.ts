@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+/**
+ * bcrypt only uses the first 72 BYTES of its input. Persian letters take two
+ * bytes in UTF-8, so the limit is enforced in bytes, not characters.
+ */
+export const MAX_PASSWORD_BYTES = 72;
+
+/** Generous cap on login input so oversized payloads are rejected cheaply. */
+const MAX_LOGIN_PASSWORD_LENGTH = 256;
+
 export const nameSchema = z
   .string({ error: "نام را وارد کنید." })
   .trim()
@@ -15,7 +24,9 @@ export const emailSchema = z
 export const passwordSchema = z
   .string({ error: "گذرواژه را وارد کنید." })
   .min(8, { error: "گذرواژه باید حداقل ۸ نویسه باشد." })
-  .max(72, { error: "گذرواژه بیش از حد طولانی است." })
+  .refine((value) => new TextEncoder().encode(value).length <= MAX_PASSWORD_BYTES, {
+    error: "گذرواژه بیش از حد طولانی است.",
+  })
   .regex(/[A-Za-z]/, { error: "گذرواژه باید حداقل یک حرف داشته باشد." })
   .regex(/[0-9]/, { error: "گذرواژه باید حداقل یک رقم داشته باشد." });
 
@@ -29,7 +40,8 @@ export const loginSchema = z.object({
   email: emailSchema,
   password: z
     .string({ error: "گذرواژه را وارد کنید." })
-    .min(1, { error: "گذرواژه را وارد کنید." }),
+    .min(1, { error: "گذرواژه را وارد کنید." })
+    .max(MAX_LOGIN_PASSWORD_LENGTH, { error: "گذرواژه بیش از حد طولانی است." }),
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;

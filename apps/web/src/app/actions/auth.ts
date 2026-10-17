@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import type { AuthFormState } from "@/lib/auth-form";
 import { getAuthLimiters } from "@/lib/auth-rate-limit";
 import { getClientIp } from "@/lib/client-ip";
+import { isUniqueViolation } from "@/lib/db-errors";
 import {
   DUMMY_PASSWORD_HASH,
   hashPassword,
@@ -49,9 +50,13 @@ export async function registerAction(
   let userId: string;
   try {
     ({ id: userId } = await createUser({ name, email, passwordHash }));
-  } catch {
+  } catch (error) {
     // Unique-violation race: the address was taken between the check and insert.
-    return { fieldErrors: { email: "این ایمیل قبلاً ثبت شده است." } };
+    if (isUniqueViolation(error)) {
+      return { fieldErrors: { email: "این ایمیل قبلاً ثبت شده است." } };
+    }
+    // Anything else (connection loss, etc.) is a real failure, not a duplicate.
+    throw error;
   }
 
   await createSession(userId);

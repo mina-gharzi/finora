@@ -105,3 +105,27 @@ describe("registerAction rate limiting", () => {
     ).rejects.toThrow("NEXT_REDIRECT:/");
   });
 });
+
+describe("registerAction database errors", () => {
+  const submit = () =>
+    registerAction(
+      {},
+      form({ name: "نام تست", email: "dup@example.com", password: "password1" }),
+    );
+
+  it("reports a duplicate email only for a unique violation", async () => {
+    mocks.findUserByEmail.mockResolvedValue(null);
+    mocks.createUser.mockRejectedValue(
+      Object.assign(new Error("dup"), { code: "23505" }),
+    );
+    expect((await submit()).fieldErrors?.email).toContain("قبلاً");
+  });
+
+  it("rethrows unrelated database failures instead of blaming the email", async () => {
+    mocks.findUserByEmail.mockResolvedValue(null);
+    mocks.createUser.mockRejectedValue(
+      Object.assign(new Error("db down"), { code: "ECONNREFUSED" }),
+    );
+    await expect(submit()).rejects.toThrow("db down");
+  });
+});
