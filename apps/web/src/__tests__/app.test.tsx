@@ -7,7 +7,7 @@ vi.mock("next/font/local", () => ({
 }));
 
 import RootLayout, { metadata } from "../app/layout";
-import DashboardPage from "../app/(app)/page";
+import { DashboardView } from "../components/dashboard/dashboard-view";
 
 afterEach(cleanup);
 
@@ -43,9 +43,9 @@ describe("RootLayout", () => {
   });
 });
 
-describe("DashboardPage", () => {
+describe("DashboardView", () => {
   it("renders the dashboard heading, the status notice and the empty state", () => {
-    render(<DashboardPage />);
+    render(<DashboardView />);
 
     const heading = screen.getByRole("heading", { level: 1 });
     expect(heading.textContent).toContain("داشبورد");
@@ -60,7 +60,7 @@ describe("DashboardPage", () => {
   });
 
   it("keeps the unimplemented action explicitly disabled", () => {
-    render(<DashboardPage />);
+    render(<DashboardView />);
 
     const button = screen.getByRole("button", { name: "افزودن تراکنش" });
     expect(button.hasAttribute("disabled")).toBe(true);

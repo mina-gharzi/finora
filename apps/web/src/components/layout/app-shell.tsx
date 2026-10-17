@@ -8,6 +8,8 @@ import { Topbar } from "./topbar";
 
 export interface AppShellProps {
   children: ReactNode;
+  /** Optional trailing controls rendered in the topbar. */
+  headerActions?: ReactNode;
 }
 
 /**
@@ -15,7 +17,7 @@ export interface AppShellProps {
  * navigation panel and the main content region. Layout uses logical spacing so
  * it works unchanged in the right-to-left Persian interface.
  */
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children, headerActions }: AppShellProps) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -31,7 +33,11 @@ export function AppShell({ children }: AppShellProps) {
         پرش به محتوای اصلی
       </a>
 
-      <Topbar menuOpen={menuOpen} onToggleMenu={toggleMenu} />
+      <Topbar
+        menuOpen={menuOpen}
+        onToggleMenu={toggleMenu}
+        actions={headerActions}
+      />
       <MobileNav open={menuOpen} activePath={pathname} onNavigate={closeMenu} />
 
       <div className="flex flex-1">

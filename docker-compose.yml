@@ -1,0 +1,44 @@
+# Local development database for Finora.
+#
+# Security: the port is published on the loopback interface only
+# (127.0.0.1), so PostgreSQL is never reachable from other machines or the
+# local network. Do not change this to "15432:5432" or "0.0.0.0:15432:5432".
+#
+# Start / recreate:
+#     docker compose --env-file apps/web/.env up -d
+#
+# Stop (keeps data):
+#     docker compose stop
+#
+# Secrets live in apps/web/.env (gitignored). Only the POSTGRES_* variables are
+# injected into the container; DATABASE_URL and SESSION_SECRET are not, because
+# the database does not need them.
+#
+# The data volume is declared `external` on purpose: this file must never
+# create or delete it. Finora's data lives in the existing `finora_pgdata`
+# volume.
+
+name: finora
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: finora-postgres
+    ports:
+      - "127.0.0.1:15432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set (see apps/web/.env)}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set (see apps/web/.env)}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set (see apps/web/.env)}
+    volumes:
+      - finora_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  finora_pgdata:
+    external: true
+    name: finora_pgdata

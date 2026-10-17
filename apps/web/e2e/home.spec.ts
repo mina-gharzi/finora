@@ -1,4 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { authenticate } from "./helpers";
+
+// The dashboard is protected, so sign in before each shell/palette assertion.
+test.beforeEach(async ({ page }) => {
+  await authenticate(page);
+});
 
 test("home page renders the Persian application shell", async ({ page }) => {
   await page.goto("/");

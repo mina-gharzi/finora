@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { CloseIcon, MenuIcon } from "@/components/icons";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Brand } from "./brand";
@@ -7,9 +8,11 @@ import { Brand } from "./brand";
 export interface TopbarProps {
   menuOpen: boolean;
   onToggleMenu: () => void;
+  /** Optional trailing controls (e.g. the signed-in user menu). */
+  actions?: ReactNode;
 }
 
-export function Topbar({ menuOpen, onToggleMenu }: TopbarProps) {
+export function Topbar({ menuOpen, onToggleMenu, actions }: TopbarProps) {
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border bg-surface px-4 sm:px-6">
       <button
@@ -29,6 +32,7 @@ export function Topbar({ menuOpen, onToggleMenu }: TopbarProps) {
 
       <div className="flex-1" />
 
+      {actions}
       <ThemeToggle />
     </header>
   );

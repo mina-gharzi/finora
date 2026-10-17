@@ -33,7 +33,7 @@ export function CardHeader({ className, children, ...props }: CardProps) {
 
 export interface CardTitleProps extends HTMLAttributes<HTMLHeadingElement> {
   /** Heading level used for the title. Defaults to h2. */
-  as?: "h2" | "h3" | "h4";
+  as?: "h1" | "h2" | "h3" | "h4";
 }
 
 export function CardTitle({
