@@ -53,6 +53,22 @@ describe("transactionInputSchema", () => {
   });
 });
 
+describe("transactionInputSchema — income vs expense", () => {
+  it.each(["income", "expense"] as const)("accepts type %s", (type) => {
+    const r = transactionInputSchema.safeParse({ ...validTx, type });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.type).toBe(type);
+  });
+
+  it("accepts the maximum safe integer amount", () => {
+    const r = transactionInputSchema.safeParse({
+      ...validTx,
+      amount: Number.MAX_SAFE_INTEGER,
+    });
+    expect(r.success && r.data.amount).toBe(Number.MAX_SAFE_INTEGER);
+  });
+});
+
 describe("isoDateSchema", () => {
   it.each(["2026-10-16", "2024-02-29"])("accepts %s", (d) =>
     expect(isoDateSchema.safeParse(d).success).toBe(true));
