@@ -5,6 +5,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { requireUserId } from "@/lib/dal";
 import { listAccounts } from "@/lib/finance/accounts";
 import {
+  buildTransactionEditHref,
   buildTransactionHistoryHref,
   hasActiveTransactionFilters,
   parseTransactionHistoryQuery,
@@ -18,18 +19,27 @@ export const metadata: Metadata = {
 
 type SearchParams = Promise<TransactionHistorySearchParams>;
 
+/** True when the URL carries the post-edit notice marker. */
+function hasUpdatedMarker(params: TransactionHistorySearchParams): boolean {
+  const value = params.updated;
+  return Array.isArray(value) ? value[0] === "1" : value === "1";
+}
+
 async function AuthenticatedTransactionHistory({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
   const userId = await requireUserId();
-  const query = parseTransactionHistoryQuery(await searchParams);
+  const search = await searchParams;
+  const query = parseTransactionHistoryQuery(search);
 
   const [accounts, history] = await Promise.all([
     listAccounts(userId),
     listTransactionHistory(userId, query),
   ]);
+
+  const returnHref = buildTransactionHistoryHref(query, history.page);
 
   return (
     <TransactionHistoryView
@@ -56,6 +66,13 @@ async function AuthenticatedTransactionHistory({
           : null
       }
       hasActiveFilters={hasActiveTransactionFilters(query)}
+      editHrefFor={(transactionId) =>
+        buildTransactionEditHref(transactionId, query, history.page)
+      }
+      deleteReturnTo={returnHref}
+      savedMessage={
+        hasUpdatedMarker(search) ? "تراکنش با موفقیت ویرایش شد." : undefined
+      }
     />
   );
 }

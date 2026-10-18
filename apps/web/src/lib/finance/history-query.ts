@@ -99,3 +99,35 @@ export function buildTransactionHistoryHref(
   const queryString = search.toString();
   return queryString ? `/transactions?${queryString}` : "/transactions";
 }
+
+/**
+ * Builds the edit link for `transactionId`, carrying the current history filters
+ * and page as a `returnTo` parameter so a successful save returns the user to
+ * exactly where they were.
+ */
+export function buildTransactionEditHref(
+  transactionId: string,
+  query: TransactionHistoryQuery,
+  page: number,
+): string {
+  const returnTo = buildTransactionHistoryHref(query, page);
+  return `/transactions/${encodeURIComponent(
+    transactionId,
+  )}/edit?returnTo=${encodeURIComponent(returnTo)}`;
+}
+
+/**
+ * Normalizes an untrusted `returnTo` value into a safe same-app history path.
+ * Anything that is not a plain `/transactions` path is discarded, so a crafted
+ * value can never turn a post-save redirect into an open redirect. The default
+ * is the unfiltered history page.
+ */
+export function parseTransactionReturnTo(
+  value: string | string[] | undefined,
+): string {
+  const raw = firstValue(value);
+  if (!raw) {
+    return "/transactions";
+  }
+  return /^\/transactions(?:\?[^\s]*)?$/.test(raw) ? raw : "/transactions";
+}

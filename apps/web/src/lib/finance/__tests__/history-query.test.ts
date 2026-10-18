@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildTransactionEditHref,
   buildTransactionHistoryHref,
   hasActiveTransactionFilters,
   parseTransactionHistoryQuery,
+  parseTransactionReturnTo,
   type TransactionHistoryQuery,
 } from "../history-query";
 
@@ -124,5 +126,67 @@ describe("buildTransactionHistoryHref", () => {
   it("includes page when greater than one", () => {
     const href = buildTransactionHistoryHref({ ...base, from: "2026-01-01" }, 4);
     expect(href).toBe("/transactions?from=2026-01-01&page=4");
+  });
+});
+
+describe("buildTransactionEditHref", () => {
+  const base: TransactionHistoryQuery = {
+    type: null,
+    accountId: null,
+    from: null,
+    to: null,
+    page: 1,
+  };
+
+  it("encodes the plain history path as returnTo", () => {
+    expect(buildTransactionEditHref("t-1", base, 1)).toBe(
+      "/transactions/t-1/edit?returnTo=%2Ftransactions",
+    );
+  });
+
+  it("carries the current filters and page in returnTo", () => {
+    const href = buildTransactionEditHref(
+      "t-1",
+      { ...base, type: "expense" },
+      2,
+    );
+    expect(href).toBe(
+      "/transactions/t-1/edit?returnTo=%2Ftransactions%3Ftype%3Dexpense%26page%3D2",
+    );
+  });
+
+  it("escapes a transaction id", () => {
+    expect(buildTransactionEditHref("a/b", base, 1)).toContain(
+      "/transactions/a%2Fb/edit",
+    );
+  });
+});
+
+describe("parseTransactionReturnTo", () => {
+  it("defaults to the unfiltered history page", () => {
+    expect(parseTransactionReturnTo(undefined)).toBe("/transactions");
+    expect(parseTransactionReturnTo("")).toBe("/transactions");
+  });
+
+  it("keeps a plain history path with filters", () => {
+    expect(parseTransactionReturnTo("/transactions?type=income&page=3")).toBe(
+      "/transactions?type=income&page=3",
+    );
+  });
+
+  it.each([
+    "https://evil.example/steal",
+    "//evil.example",
+    "/accounts",
+    "/transactions/../accounts",
+    "javascript:alert(1)",
+  ])("rejects the unsafe value %j", (value) => {
+    expect(parseTransactionReturnTo(value)).toBe("/transactions");
+  });
+
+  it("takes the first value when the parameter repeats", () => {
+    expect(parseTransactionReturnTo(["/transactions?page=2", "/accounts"])).toBe(
+      "/transactions?page=2",
+    );
   });
 });

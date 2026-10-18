@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { formatTomanWithUnit } from "@finora/shared";
 import { TransactionsIcon } from "@/components/icons";
+import { Alert } from "@/components/ui/alert";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -18,6 +19,7 @@ import { TRANSACTION_TYPES, type TransactionType } from "@/lib/finance/types";
 import type { TransactionHistoryItem } from "@/lib/finance/transactions";
 import { formatJalaliFromIso } from "@/lib/format";
 import type { AccountOption } from "./create-transaction-form";
+import { DeleteTransactionButton } from "./delete-transaction-button";
 
 const TYPE_BADGE: Record<TransactionType, BadgeVariant> = {
   income: "success",
@@ -31,6 +33,9 @@ const TYPE_AMOUNT_COLOR: Record<TransactionType, string> = {
 
 const PAGINATION_LINK =
   "inline-flex h-9 items-center justify-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-foreground transition-colors hover:bg-surface-muted";
+
+const ACTION_LINK =
+  "inline-flex h-8 items-center justify-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-foreground transition-colors hover:bg-surface-muted";
 
 export interface TransactionHistoryFiltersView {
   /** Empty string means "no filter" (all values). */
@@ -50,6 +55,12 @@ export interface TransactionHistoryViewProps {
   /** Link to the next page, or null when there is nothing more to show. */
   nextHref: string | null;
   hasActiveFilters: boolean;
+  /** Builds the edit link for a row, preserving the current filters and page. */
+  editHrefFor: (transactionId: string) => string;
+  /** Same-app path the user returns to after deleting a row. */
+  deleteReturnTo: string;
+  /** Optional success notice shown after a downstream edit. */
+  savedMessage?: string;
 }
 
 /**
@@ -65,6 +76,9 @@ export function TransactionHistoryView({
   prevHref,
   nextHref,
   hasActiveFilters,
+  editHrefFor,
+  deleteReturnTo,
+  savedMessage,
 }: TransactionHistoryViewProps) {
   const showOnboarding = !hasActiveFilters && page === 1;
 
@@ -84,6 +98,8 @@ export function TransactionHistoryView({
           افزودن تراکنش
         </Link>
       </header>
+
+      {savedMessage && <Alert variant="success">{savedMessage}</Alert>}
 
       <Card>
         <CardContent>
@@ -184,7 +200,7 @@ export function TransactionHistoryView({
           <div className="overflow-x-auto">
             <table
               aria-label="فهرست تراکنش‌ها"
-              className="w-full min-w-[40rem] border-collapse text-sm"
+              className="w-full min-w-[46rem] border-collapse text-sm"
             >
               <thead>
                 <tr className="border-b border-border text-start text-xs text-muted-foreground">
@@ -205,6 +221,9 @@ export function TransactionHistoryView({
                   </th>
                   <th scope="col" className="px-5 py-3 text-start font-medium">
                     توضیحات
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-start font-medium">
+                    عملیات
                   </th>
                 </tr>
               </thead>
@@ -238,6 +257,21 @@ export function TransactionHistoryView({
                     </td>
                     <td className="px-5 py-3 text-muted-foreground">
                       {item.note || "—"}
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={editHrefFor(item.id)}
+                          className={ACTION_LINK}
+                          aria-label="ویرایش تراکنش"
+                        >
+                          ویرایش
+                        </Link>
+                        <DeleteTransactionButton
+                          transactionId={item.id}
+                          returnTo={deleteReturnTo}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))}

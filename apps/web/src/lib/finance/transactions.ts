@@ -10,7 +10,7 @@ import {
 import { toFieldErrors } from "../validation";
 import { findAccountForUser } from "./accounts";
 import { findCategoryForUser } from "./categories";
-import { transactionInputSchema } from "./validation";
+import { transactionIdSchema, transactionInputSchema } from "./validation";
 import {
   TRANSACTION_HISTORY_PAGE_SIZE,
   type TransactionHistoryQuery,
@@ -47,6 +47,42 @@ const CATEGORY_NOT_FOUND = "دسته‌بندی موردنظر یافت نشد."
 const CATEGORY_TYPE_MISMATCH =
   "دسته‌بندی انتخاب‌شده با نوع تراکنش هم‌خوانی ندارد.";
 
+type ReferenceResolution =
+  | { ok: true }
+  | { ok: false; fieldErrors: Record<string, string> };
+
+/**
+ * Shared cross-record guard for create and update: verifies that the referenced
+ * account — and, when present, the referenced category — belong to `userId`, and
+ * that the category's `kind` matches the transaction `type`. A category is bound
+ * to a direction ("income" or "expense"), so borrowing one across directions is
+ * rejected even though ownership is valid.
+ */
+async function resolveReferences(
+  userId: string,
+  accountId: string,
+  categoryId: string | null,
+  type: TransactionType,
+): Promise<ReferenceResolution> {
+  const account = await findAccountForUser(accountId, userId);
+  if (!account) {
+    return { ok: false, fieldErrors: { accountId: ACCOUNT_NOT_FOUND } };
+  }
+
+  if (categoryId !== null) {
+    const category = await findCategoryForUser(categoryId, userId);
+    if (!category) {
+      return { ok: false, fieldErrors: { categoryId: CATEGORY_NOT_FOUND } };
+    }
+
+    if (category.kind !== type) {
+      return { ok: false, fieldErrors: { categoryId: CATEGORY_TYPE_MISMATCH } };
+    }
+  }
+
+  return { ok: true };
+}
+
 /**
  * Validates `input`, verifies that the referenced account (and optional
  * category) belong to `userId`, then inserts the transaction. The owner id is
@@ -62,31 +98,87 @@ export async function createTransaction(
     return { ok: false, fieldErrors: toFieldErrors(parsed.error) };
   }
 
-  const { accountId, categoryId } = parsed.data;
-
-  const account = await findAccountForUser(accountId, userId);
-  if (!account) {
-    return { ok: false, fieldErrors: { accountId: ACCOUNT_NOT_FOUND } };
-  }
-
-  if (categoryId !== null) {
-    const category = await findCategoryForUser(categoryId, userId);
-    if (!category) {
-      return { ok: false, fieldErrors: { categoryId: CATEGORY_NOT_FOUND } };
-    }
-
-    // A category is bound to a direction ("income" or "expense"); attaching an
-    // income category to an expense (or vice versa) would corrupt reporting, so
-    // it is rejected even though ownership is valid.
-    if (category.kind !== parsed.data.type) {
-      return { ok: false, fieldErrors: { categoryId: CATEGORY_TYPE_MISMATCH } };
-    }
+  const references = await resolveReferences(
+    userId,
+    parsed.data.accountId,
+    parsed.data.categoryId,
+    parsed.data.type,
+  );
+  if (!references.ok) {
+    return { ok: false, fieldErrors: references.fieldErrors };
   }
 
   const [transaction] = await getDb()
     .insert(transactions)
     .values({ ...parsed.data, userId })
     .returning();
+
+  return { ok: true, transaction };
+}
+
+export type UpdateTransactionResult =
+  | { ok: true; transaction: TransactionRow }
+  | { ok: false; reason: "not_found" }
+  | { ok: false; reason: "invalid"; fieldErrors: Record<string, string> };
+
+/**
+ * Updates a transaction owned by `userId`.
+ *
+ * Safety layers, in order:
+ * 1. A malformed id is reported as "not found" so callers cannot distinguish it
+ *    from a real-but-foreign id.
+ * 2. The id is loaded through `findTransactionForUser`, which enforces ownership
+ *    and collapses "missing" and "someone else's" into the same `not_found`.
+ * 3. `input` is validated and its account/category references are re-checked
+ *    against the session user.
+ * 4. The write is additionally scoped by `id = ? AND user_id = ?`, so even if
+ *    ownership changed between the read and the write, no foreign row is ever
+ *    mutated; a zero-row update is reported as `not_found`.
+ */
+export async function updateTransaction(
+  userId: string,
+  transactionId: string,
+  input: unknown,
+): Promise<UpdateTransactionResult> {
+  if (!transactionIdSchema.safeParse(transactionId).success) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  const parsed = transactionInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      reason: "invalid",
+      fieldErrors: toFieldErrors(parsed.error),
+    };
+  }
+
+  const existing = await findTransactionForUser(transactionId, userId);
+  if (!existing) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  const references = await resolveReferences(
+    userId,
+    parsed.data.accountId,
+    parsed.data.categoryId,
+    parsed.data.type,
+  );
+  if (!references.ok) {
+    return { ok: false, reason: "invalid", fieldErrors: references.fieldErrors };
+  }
+
+  const [transaction] = await getDb()
+    .update(transactions)
+    .set({ ...parsed.data, updatedAt: new Date() })
+    .where(
+      and(eq(transactions.id, transactionId), eq(transactions.userId, userId)),
+    )
+    .returning();
+
+  if (!transaction) {
+    return { ok: false, reason: "not_found" };
+  }
 
   return { ok: true, transaction };
 }
@@ -202,16 +294,29 @@ export async function findTransactionForUser(
   return row;
 }
 
-/** Deletes a transaction owned by `userId`. False for foreign/missing ids. */
+/**
+ * Deletes a transaction owned by `userId`. Returns false for foreign/missing
+ * (or malformed) ids, so callers cannot tell the cases apart.
+ *
+ * The delete is atomic and owner-scoped: the row is removed by
+ * `id = ? AND user_id = ?` in a single statement and the affected row is
+ * returned. A foreign id therefore matches nothing and is reported as false
+ * without ever reading or touching another user's row.
+ */
 export async function deleteTransaction(
   userId: string,
   transactionId: string,
 ): Promise<boolean> {
-  const transaction = await findTransactionForUser(transactionId, userId);
-  if (!transaction) {
+  if (!transactionIdSchema.safeParse(transactionId).success) {
     return false;
   }
 
-  await getDb().delete(transactions).where(eq(transactions.id, transactionId));
-  return true;
+  const deleted = await getDb()
+    .delete(transactions)
+    .where(
+      and(eq(transactions.id, transactionId), eq(transactions.userId, userId)),
+    )
+    .returning();
+
+  return deleted.length > 0;
 }

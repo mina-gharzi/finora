@@ -9,7 +9,10 @@ import { ACCOUNT_TYPES, TRANSACTION_TYPES } from "./types";
  * must be enforced server-side later; they are not possible here.
  */
 
-const idSchema = z.uuid({ error: "شناسه معتبر نیست." });
+/** A UUID-shaped record id (account, category or transaction). */
+export const transactionIdSchema = z.uuid({ error: "شناسه معتبر نیست." });
+
+const idSchema = transactionIdSchema;
 
 const nameSchema = z
   .string({ error: "نام را وارد کنید." })

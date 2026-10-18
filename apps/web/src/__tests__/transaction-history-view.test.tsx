@@ -2,7 +2,13 @@
  * @vitest-environment jsdom
  */
 import type { AnchorHTMLAttributes } from "react";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
@@ -16,6 +22,20 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
+
+vi.mock("@/app/actions/transactions", () => ({
+  createTransactionAction: vi.fn(),
+  updateTransactionAction: vi.fn(),
+  deleteTransactionAction: vi.fn(),
+}));
+
+vi.mock("react", async () => {
+  const actual = await vi.importActual<typeof import("react")>("react");
+  return {
+    ...actual,
+    useActionState: () => [{ status: "idle" }, () => {}, false],
+  };
+});
 
 import {
   TransactionHistoryView,
@@ -64,6 +84,8 @@ function renderView(overrides: Partial<TransactionHistoryViewProps> = {}) {
       prevHref={null}
       nextHref={null}
       hasActiveFilters={false}
+      editHrefFor={(id) => `/transactions/${id}/edit`}
+      deleteReturnTo="/transactions"
       {...overrides}
     />,
   );
@@ -108,6 +130,64 @@ describe("TransactionHistoryView — rows", () => {
     for (const link of links) {
       expect(link.getAttribute("href")).toBe("/transactions/new");
     }
+  });
+});
+
+describe("TransactionHistoryView — row actions", () => {
+  it("links each row to its edit page using the provided href builder", () => {
+    renderView({
+      editHrefFor: (id) =>
+        `/transactions/${id}/edit?returnTo=%2Ftransactions%3Ftype%3Dexpense`,
+    });
+
+    const editLinks = screen.getAllByRole("link", { name: "ویرایش تراکنش" });
+    expect(editLinks).toHaveLength(ITEMS.length);
+    expect(editLinks[0].getAttribute("href")).toBe(
+      `/transactions/${ITEMS[0].id}/edit?returnTo=%2Ftransactions%3Ftype%3Dexpense`,
+    );
+  });
+
+  it("offers a delete control per row with the row id in a hidden field", () => {
+    const { container } = renderView();
+
+    const deleteButtons = screen.getAllByRole("button", { name: "حذف تراکنش" });
+    expect(deleteButtons).toHaveLength(ITEMS.length);
+
+    for (const button of deleteButtons) fireEvent.click(button);
+
+    const hiddenIds = Array.from(
+      container.querySelectorAll('input[name="transactionId"]'),
+    ).map((input) => (input as HTMLInputElement).value);
+    expect(hiddenIds).toEqual([ITEMS[0].id, ITEMS[1].id]);
+  });
+
+  it("carries the delete return path in a hidden field", () => {
+    const { container } = renderView({
+      deleteReturnTo: "/transactions?page=2",
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "حذف تراکنش" })[0]);
+
+    const hiddenReturns = Array.from(
+      container.querySelectorAll('input[name="returnTo"]'),
+    ).map((input) => (input as HTMLInputElement).value);
+    expect(hiddenReturns).toContain("/transactions?page=2");
+  });
+});
+
+describe("TransactionHistoryView — saved notice", () => {
+  it("shows a success notice when a saved message is provided", () => {
+    renderView({ savedMessage: "تراکنش با موفقیت ویرایش شد." });
+
+    expect(
+      screen.getByText("تراکنش با موفقیت ویرایش شد."),
+    ).toBeTruthy();
+  });
+
+  it("shows no notice by default", () => {
+    renderView();
+
+    expect(screen.queryByText("تراکنش با موفقیت ویرایش شد.")).toBeNull();
   });
 });
 

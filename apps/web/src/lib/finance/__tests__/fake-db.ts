@@ -9,9 +9,12 @@
 export interface FakeDbState {
   selectQueue: unknown[][];
   insertResult: unknown[];
+  updateResult: unknown[];
   deleteResult: unknown[];
   insertedValues: unknown[];
+  updatedValues: unknown[];
   insertCalls: number;
+  updateCalls: number;
   deleteCalls: number;
   /** Conditions passed to `.where(...)`, in call order (for scope assertions). */
   whereConditions: unknown[];
@@ -26,6 +29,7 @@ interface Chain extends PromiseLike<unknown[]> {
   offset: () => Chain;
   orderBy: () => Chain;
   values: (value: unknown) => Chain;
+  set: (value: unknown) => Chain;
   returning: () => Promise<unknown[]>;
 }
 
@@ -45,6 +49,10 @@ function makeChain(resolveTo: unknown[], state: FakeDbState): Chain {
       state.insertedValues.push(value);
       return chain;
     },
+    set: (value: unknown) => {
+      state.updatedValues.push(value);
+      return chain;
+    },
     returning: () => Promise.resolve(resolveTo),
     then: (onFulfilled, onRejected) =>
       Promise.resolve(resolveTo).then(onFulfilled, onRejected),
@@ -59,6 +67,10 @@ export function createFakeDb(state: FakeDbState) {
       state.insertCalls += 1;
       return makeChain(state.insertResult, state);
     },
+    update: () => {
+      state.updateCalls += 1;
+      return makeChain(state.updateResult, state);
+    },
     delete: () => {
       state.deleteCalls += 1;
       return makeChain(state.deleteResult, state);
@@ -70,9 +82,12 @@ export function createFakeDbState(): FakeDbState {
   return {
     selectQueue: [],
     insertResult: [],
+    updateResult: [],
     deleteResult: [],
     insertedValues: [],
+    updatedValues: [],
     insertCalls: 0,
+    updateCalls: 0,
     deleteCalls: 0,
     whereConditions: [],
   };

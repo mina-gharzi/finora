@@ -8,9 +8,12 @@ const h = vi.hoisted(() => ({
   state: {
     selectQueue: [] as unknown[][],
     insertResult: [] as unknown[],
+    updateResult: [] as unknown[],
     deleteResult: [] as unknown[],
     insertedValues: [] as unknown[],
+    updatedValues: [] as unknown[],
     insertCalls: 0,
+    updateCalls: 0,
     deleteCalls: 0,
     whereConditions: [] as unknown[],
   },
@@ -49,9 +52,12 @@ function accountRow(overrides: Partial<AccountRow> = {}): AccountRow {
 beforeEach(() => {
   h.state.selectQueue = [];
   h.state.insertResult = [];
+  h.state.updateResult = [];
   h.state.deleteResult = [];
   h.state.insertedValues = [];
+  h.state.updatedValues = [];
   h.state.insertCalls = 0;
+  h.state.updateCalls = 0;
   h.state.deleteCalls = 0;
 });
 

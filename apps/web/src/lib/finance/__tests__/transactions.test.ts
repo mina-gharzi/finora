@@ -9,9 +9,12 @@ const h = vi.hoisted(() => ({
   state: {
     selectQueue: [] as unknown[][],
     insertResult: [] as unknown[],
+    updateResult: [] as unknown[],
     deleteResult: [] as unknown[],
     insertedValues: [] as unknown[],
+    updatedValues: [] as unknown[],
     insertCalls: 0,
+    updateCalls: 0,
     deleteCalls: 0,
     whereConditions: [] as unknown[],
   },
@@ -28,6 +31,7 @@ import {
   findTransactionForUser,
   listTransactionHistory,
   listTransactions,
+  updateTransaction,
 } from "@/lib/finance/transactions";
 import { TRANSACTION_HISTORY_PAGE_SIZE } from "@/lib/finance/history-query";
 
@@ -67,9 +71,12 @@ const baseInput = {
 beforeEach(() => {
   h.state.selectQueue = [];
   h.state.insertResult = [];
+  h.state.updateResult = [];
   h.state.deleteResult = [];
   h.state.insertedValues = [];
+  h.state.updatedValues = [];
   h.state.insertCalls = 0;
+  h.state.updateCalls = 0;
   h.state.deleteCalls = 0;
   h.state.whereConditions = [];
 });
@@ -252,20 +259,156 @@ describe("transaction reads and deletes are owner-scoped", () => {
     ).resolves.toBeNull();
   });
 
-  it("never deletes another user's transaction", async () => {
-    h.state.selectQueue = [[transactionRow({ userId: OTHER })]];
-    await expect(
-      deleteTransaction(OWNER, transactionRow().id),
-    ).resolves.toBe(false);
-    expect(h.state.deleteCalls).toBe(0);
-  });
+  it("deletes the owner's transaction with an owner-scoped statement", async () => {
+    h.state.deleteResult = [transactionRow()];
 
-  it("deletes the owner's transaction", async () => {
-    h.state.selectQueue = [[transactionRow()]];
     await expect(
       deleteTransaction(OWNER, transactionRow().id),
     ).resolves.toBe(true);
+
     expect(h.state.deleteCalls).toBe(1);
+    const { sql, params } = new PgDialect().sqlToQuery(
+      h.state.whereConditions[h.state.whereConditions.length - 1] as never,
+    );
+    expect(sql).toContain("id");
+    expect(sql).toContain("user_id");
+    expect(params).toContain(OWNER);
+    expect(params).toContain(transactionRow().id);
+  });
+
+  it("reports false when the owner-scoped delete matches no row", async () => {
+    h.state.deleteResult = [];
+
+    await expect(
+      deleteTransaction(OWNER, transactionRow().id),
+    ).resolves.toBe(false);
+    expect(h.state.deleteCalls).toBe(1);
+  });
+
+  it("rejects a malformed id before touching the database", async () => {
+    await expect(deleteTransaction(OWNER, "not-a-uuid")).resolves.toBe(false);
+    expect(h.state.deleteCalls).toBe(0);
+  });
+});
+
+describe("updateTransaction — ownership and validation", () => {
+  const newInput = {
+    accountId: ACCOUNT_ID,
+    categoryId: null,
+    type: "income",
+    amount: 99000,
+    occurredOn: "2026-09-09",
+    note: "ویرایش شد",
+  };
+
+  it("updates an owned transaction with an owner-scoped statement", async () => {
+    h.state.selectQueue = [[transactionRow()], [ownedAccount]];
+    h.state.updateResult = [
+      transactionRow({ type: "income", amount: 99000 }),
+    ];
+
+    const result = await updateTransaction(OWNER, transactionRow().id, newInput);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.transaction.amount).toBe(99000);
+    expect(h.state.updateCalls).toBe(1);
+    expect(h.state.updatedValues[0]).toMatchObject({
+      accountId: ACCOUNT_ID,
+      type: "income",
+      amount: 99000,
+      occurredOn: "2026-09-09",
+    });
+
+    const { sql, params } = new PgDialect().sqlToQuery(
+      h.state.whereConditions[h.state.whereConditions.length - 1] as never,
+    );
+    expect(sql).toContain("id");
+    expect(sql).toContain("user_id");
+    expect(params).toContain(OWNER);
+    expect(params).toContain(transactionRow().id);
+  });
+
+  it("does not touch the database for a malformed id", async () => {
+    const result = await updateTransaction(OWNER, "not-a-uuid", newInput);
+
+    expect(result).toEqual({ ok: false, reason: "not_found" });
+    expect(h.state.updateCalls).toBe(0);
+    expect(h.state.selectQueue).toEqual([]);
+  });
+
+  it("rejects invalid input before loading the transaction", async () => {
+    const result = await updateTransaction(OWNER, transactionRow().id, {
+      ...newInput,
+      amount: 0,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok && result.reason === "invalid") {
+      expect(result.fieldErrors.amount).toBeTruthy();
+    }
+    expect(h.state.updateCalls).toBe(0);
+  });
+
+  it("fails safely when the transaction belongs to another user", async () => {
+    h.state.selectQueue = [[transactionRow({ userId: OTHER })]];
+
+    const result = await updateTransaction(OWNER, transactionRow().id, newInput);
+
+    expect(result).toEqual({ ok: false, reason: "not_found" });
+    expect(h.state.updateCalls).toBe(0);
+  });
+
+  it("fails safely when the transaction does not exist", async () => {
+    h.state.selectQueue = [[]];
+
+    const result = await updateTransaction(OWNER, transactionRow().id, newInput);
+
+    expect(result).toEqual({ ok: false, reason: "not_found" });
+    expect(h.state.updateCalls).toBe(0);
+  });
+
+  it("refuses to move a transaction onto another user's account", async () => {
+    h.state.selectQueue = [
+      [transactionRow()],
+      [{ id: ACCOUNT_ID, userId: OTHER }],
+    ];
+
+    const result = await updateTransaction(OWNER, transactionRow().id, newInput);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok && result.reason === "invalid") {
+      expect(result.fieldErrors.accountId).toBeTruthy();
+    }
+    expect(h.state.updateCalls).toBe(0);
+  });
+
+  it("refuses a category whose kind does not match the new type", async () => {
+    h.state.selectQueue = [
+      [transactionRow()],
+      [ownedAccount],
+      [{ ...ownedCategory, kind: "expense" }],
+    ];
+
+    const result = await updateTransaction(OWNER, transactionRow().id, {
+      ...newInput,
+      categoryId: CATEGORY_ID,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok && result.reason === "invalid") {
+      expect(result.fieldErrors.categoryId).toBeTruthy();
+    }
+    expect(h.state.updateCalls).toBe(0);
+  });
+
+  it("reports not_found when the guarded update matches no row", async () => {
+    h.state.selectQueue = [[transactionRow()], [ownedAccount]];
+    h.state.updateResult = [];
+
+    const result = await updateTransaction(OWNER, transactionRow().id, newInput);
+
+    expect(result).toEqual({ ok: false, reason: "not_found" });
+    expect(h.state.updateCalls).toBe(1);
   });
 });
 
