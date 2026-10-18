@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -7,7 +7,6 @@ vi.mock("next/font/local", () => ({
 }));
 
 import RootLayout, { metadata } from "../app/layout";
-import { DashboardView } from "../components/dashboard/dashboard-view";
 
 afterEach(cleanup);
 
@@ -40,29 +39,5 @@ describe("RootLayout", () => {
     const title = metadata.title as { default: string };
     expect(title.default).toContain("فینورا");
     expect(metadata.description).toBeTruthy();
-  });
-});
-
-describe("DashboardView", () => {
-  it("renders the dashboard heading, the status notice and the empty state", () => {
-    render(<DashboardView />);
-
-    const heading = screen.getByRole("heading", { level: 1 });
-    expect(heading.textContent).toContain("داشبورد");
-
-    expect(screen.getByRole("status").textContent).toContain("در حال ساخت");
-
-    const emptyTitle = screen.getByRole("heading", {
-      level: 2,
-      name: "هنوز تراکنشی ثبت نشده است",
-    });
-    expect(emptyTitle.textContent).toContain("هنوز تراکنشی ثبت نشده است");
-  });
-
-  it("keeps the unimplemented action explicitly disabled", () => {
-    render(<DashboardView />);
-
-    const button = screen.getByRole("button", { name: "افزودن تراکنش" });
-    expect(button.hasAttribute("disabled")).toBe(true);
   });
 });

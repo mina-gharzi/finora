@@ -36,6 +36,30 @@ export function parseTomanAmount(input: string): Toman | null {
   return isValidToman(value) ? value : null;
 }
 
+/**
+ * Converts a database aggregate (Postgres `sum`/`bigint`, which node-postgres
+ * surfaces as a string) into integer Toman.
+ *
+ * A missing value (an aggregate over zero rows) is `0`. Anything that is not a
+ * safe, non-negative integer throws rather than being silently coerced, so a
+ * total can never lose precision unnoticed.
+ */
+export function toTomanFromAggregate(
+  value: string | number | null | undefined,
+): Toman {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!isValidToman(parsed)) {
+    throw new RangeError(
+      "Aggregate amount is outside the supported Toman range.",
+    );
+  }
+  return parsed;
+}
+
 /** Exact addition; throws instead of silently losing precision. */
 export function addToman(a: Toman, b: Toman): Toman {
   const sum = a + b;

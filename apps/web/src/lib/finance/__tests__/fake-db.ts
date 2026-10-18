@@ -25,6 +25,7 @@ interface Chain extends PromiseLike<unknown[]> {
   where: (condition?: unknown) => Chain;
   innerJoin: () => Chain;
   leftJoin: () => Chain;
+  groupBy: () => Chain;
   limit: () => Chain;
   offset: () => Chain;
   orderBy: () => Chain;
@@ -42,6 +43,7 @@ function makeChain(resolveTo: unknown[], state: FakeDbState): Chain {
     },
     innerJoin: () => chain,
     leftJoin: () => chain,
+    groupBy: () => chain,
     limit: () => chain,
     offset: () => chain,
     orderBy: () => chain,
