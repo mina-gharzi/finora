@@ -8,7 +8,10 @@ export default defineConfig({
   reporter: "list",
   use: {
     baseURL: "http://127.0.0.1:3000",
-    trace: "on-first-retry",
+    // `retries` is 0, so `on-first-retry` would never record anything; keep a
+    // trace for failing runs instead (written under the gitignored
+    // test-results/ directory).
+    trace: "retain-on-failure",
   },
   projects: [
     {

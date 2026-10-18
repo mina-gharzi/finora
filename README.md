@@ -12,6 +12,46 @@ A Persian personal finance management application.
 
 pnpm
 
+## Verification
+
+All commands below are run from the repository root and cover both workspace
+packages where applicable:
+
+```sh
+pnpm typecheck   # tsc --noEmit for apps/web and packages/shared
+pnpm lint        # eslint for apps/web
+pnpm test:unit   # Vitest (apps/web) + node:test (packages/shared)
+pnpm build       # Next.js production build for apps/web
+pnpm test        # unit tests, then the Playwright suite
+```
+
+`pnpm lint` only targets `apps/web`: `packages/shared` ships no ESLint config
+or lint script. Unit tests never open a database connection — the DAL tests
+mock `@/db`, so no container or `.env` file is needed for `pnpm test:unit`.
+
+## End-to-end tests
+
+`pnpm test:e2e` builds the app and runs Playwright against it. It needs more
+than the unit tests do:
+
+1. `apps/web/.env` created from `apps/web/.env.example` (contains `POSTGRES_*`
+   and `SESSION_SECRET`; never committed).
+2. The PostgreSQL container up and migrated:
+
+   ```sh
+   docker compose --env-file apps/web/.env up -d
+   pnpm --filter @finora/web db:migrate
+   ```
+
+3. A production build (`pnpm test:e2e` builds first; running
+   `pnpm --filter @finora/web test:e2e` alone assumes `.next/` already exists).
+4. Playwright's browser binary: `pnpm --filter @finora/web exec playwright install chromium`.
+5. Port `3000` free — Playwright starts `pnpm start` itself and waits for
+   `http://127.0.0.1:3000`.
+
+E2E tests are not part of `.github/workflows/ci.yml`, because CI has no
+database container or secrets.
+
 ## Local database
 
 Finora uses a local PostgreSQL container for development.

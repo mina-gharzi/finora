@@ -1,0 +1,65 @@
+# Verification pipeline for the commands that are runnable without any
+# external service. Every step below is a root script from package.json, so CI
+# runs exactly what developers run locally:
+#
+#   pnpm typecheck  -> tsc --noEmit for apps/web and packages/shared
+#   pnpm lint       -> eslint for apps/web
+#   pnpm test:unit  -> Vitest (apps/web) + node:test (packages/shared)
+#   pnpm build      -> next build for apps/web
+#
+# The Playwright suite (pnpm test:e2e) is deliberately NOT part of this
+# workflow: it needs a running PostgreSQL container, applied migrations and a
+# populated apps/web/.env file, none of which exist in CI. Its local
+# prerequisites are documented in README.md.
+#
+# No secret is configured here. Unit tests mock the database module and
+# Next.js reads SESSION_SECRET/DATABASE_URL lazily, so the build does not need
+# credentials.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, lint, unit tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Version comes from the root "packageManager" field (pnpm@12.6.0).
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (apps/web + packages/shared)
+        run: pnpm typecheck
+
+      - name: Lint (apps/web)
+        run: pnpm lint
+
+      - name: Unit tests (apps/web + packages/shared)
+        run: pnpm test:unit
+
+      - name: Production build (apps/web)
+        run: pnpm build
