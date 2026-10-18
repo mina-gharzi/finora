@@ -2,8 +2,10 @@ import type { AnchorHTMLAttributes } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const nav = vi.hoisted(() => ({ pathname: "/" }));
+
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/",
+  usePathname: () => nav.pathname,
 }));
 
 vi.mock("next/link", () => ({
@@ -20,7 +22,10 @@ vi.mock("next/link", () => ({
 
 import { AppShell } from "@/components/layout/app-shell";
 
-afterEach(cleanup);
+afterEach(() => {
+  nav.pathname = "/";
+  cleanup();
+});
 
 function sidebar(): HTMLElement | null {
   return document.querySelector("aside");
@@ -71,6 +76,17 @@ describe("AppShell", () => {
     ).toHaveLength(3);
     expect(aside.querySelectorAll("li")).toHaveLength(6);
     expect(aside.textContent).toContain("به‌زودی");
+  });
+
+  it("keeps a destination active on its nested routes", () => {
+    nav.pathname = "/transactions/new";
+    render(<AppShell>content</AppShell>);
+
+    const transactions = screen.getByRole("link", { name: "تراکنش‌ها" });
+    expect(transactions.getAttribute("aria-current")).toBe("page");
+
+    const dashboard = screen.getByRole("link", { name: "داشبورد" });
+    expect(dashboard.getAttribute("aria-current")).toBeNull();
   });
 
   it("never renders a disabled placeholder as a link", () => {

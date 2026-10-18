@@ -2,7 +2,7 @@ import { cn } from "@/lib/cn";
 import { Badge } from "@/components/ui/badge";
 import { NavItem } from "@/components/ui/nav-item";
 import { Brand } from "./brand";
-import { COMING_SOON_LABEL, navGroups, type NavEntry } from "./nav-config";
+import { COMING_SOON_LABEL, isNavEntryActive, navGroups, type NavEntry } from "./nav-config";
 
 function NavSection({
   title,
@@ -26,7 +26,7 @@ function NavSection({
             icon={item.icon}
             href={item.href}
             disabled={item.disabled}
-            active={!item.disabled && item.href === activePath}
+            active={isNavEntryActive(item, activePath)}
             badge={
               item.disabled ? (
                 <Badge variant="neutral">{COMING_SOON_LABEL}</Badge>

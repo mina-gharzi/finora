@@ -1,55 +1,81 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { TransactionsView } from "@/components/transactions/transactions-view";
+import { TransactionHistoryView } from "@/components/transactions/transaction-history-view";
 import { Spinner } from "@/components/ui/spinner";
 import { requireUserId } from "@/lib/dal";
 import { listAccounts } from "@/lib/finance/accounts";
-import { listCategories } from "@/lib/finance/categories";
-import type { TransactionType } from "@/lib/finance/types";
+import {
+  buildTransactionHistoryHref,
+  hasActiveTransactionFilters,
+  parseTransactionHistoryQuery,
+  type TransactionHistorySearchParams,
+} from "@/lib/finance/history-query";
+import { listTransactionHistory } from "@/lib/finance/transactions";
 
 export const metadata: Metadata = {
-  title: "تراکنش جدید",
+  title: "تراکنش‌ها",
 };
 
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+type SearchParams = Promise<TransactionHistorySearchParams>;
 
-async function AuthenticatedTransactionForm() {
+async function AuthenticatedTransactionHistory({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   const userId = await requireUserId();
-  const [accounts, categories] = await Promise.all([
+  const query = parseTransactionHistoryQuery(await searchParams);
+
+  const [accounts, history] = await Promise.all([
     listAccounts(userId),
-    listCategories(userId),
+    listTransactionHistory(userId, query),
   ]);
 
   return (
-    <TransactionsView
+    <TransactionHistoryView
+      items={history.items}
       accounts={accounts.map((account) => ({
         id: account.id,
         name: account.name,
       }))}
-      categories={categories.map((category) => ({
-        id: category.id,
-        name: category.name,
-        kind: category.kind as TransactionType,
-      }))}
-      defaultDate={todayIsoDate()}
+      filters={{
+        type: query.type ?? "",
+        accountId: query.accountId ?? "",
+        from: query.from ?? "",
+        to: query.to ?? "",
+      }}
+      page={history.page}
+      prevHref={
+        history.page > 1
+          ? buildTransactionHistoryHref(query, history.page - 1)
+          : null
+      }
+      nextHref={
+        history.hasMore
+          ? buildTransactionHistoryHref(query, history.page + 1)
+          : null
+      }
+      hasActiveFilters={hasActiveTransactionFilters(query)}
     />
   );
 }
 
-function TransactionsFallback() {
+function TransactionHistoryFallback() {
   return (
-    <div className="mx-auto flex w-full max-w-3xl justify-center py-20">
+    <div className="mx-auto flex w-full max-w-5xl justify-center py-20">
       <Spinner className="size-6 text-muted-foreground" />
     </div>
   );
 }
 
-export default function TransactionsPage() {
+export default function TransactionsPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   return (
-    <Suspense fallback={<TransactionsFallback />}>
-      <AuthenticatedTransactionForm />
+    <Suspense fallback={<TransactionHistoryFallback />}>
+      <AuthenticatedTransactionHistory searchParams={searchParams} />
     </Suspense>
   );
 }

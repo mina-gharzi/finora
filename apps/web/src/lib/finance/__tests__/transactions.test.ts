@@ -2,6 +2,7 @@
  * @vitest-environment node
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 import type { TransactionRow } from "@/db/schema";
 
 const h = vi.hoisted(() => ({
@@ -12,6 +13,7 @@ const h = vi.hoisted(() => ({
     insertedValues: [] as unknown[],
     insertCalls: 0,
     deleteCalls: 0,
+    whereConditions: [] as unknown[],
   },
 }));
 
@@ -24,8 +26,10 @@ import {
   createTransaction,
   deleteTransaction,
   findTransactionForUser,
+  listTransactionHistory,
   listTransactions,
 } from "@/lib/finance/transactions";
+import { TRANSACTION_HISTORY_PAGE_SIZE } from "@/lib/finance/history-query";
 
 const OWNER = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
@@ -67,6 +71,7 @@ beforeEach(() => {
   h.state.insertedValues = [];
   h.state.insertCalls = 0;
   h.state.deleteCalls = 0;
+  h.state.whereConditions = [];
 });
 
 describe("createTransaction — ownership", () => {
@@ -261,5 +266,117 @@ describe("transaction reads and deletes are owner-scoped", () => {
       deleteTransaction(OWNER, transactionRow().id),
     ).resolves.toBe(true);
     expect(h.state.deleteCalls).toBe(1);
+  });
+});
+
+describe("listTransactionHistory", () => {
+  const baseQuery = {
+    type: null,
+    accountId: null,
+    from: null,
+    to: null,
+    page: 1,
+  };
+
+  function historyRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "66666666-6666-4666-8666-666666666666",
+      type: "expense",
+      amount: 15000,
+      occurredOn: "2026-10-10",
+      note: "خرید روزانه",
+      accountId: ACCOUNT_ID,
+      accountName: "بانک ملی",
+      categoryName: "خرید",
+      ...overrides,
+    };
+  }
+
+  function lastWhere() {
+    return h.state.whereConditions[h.state.whereConditions.length - 1];
+  }
+
+  it("maps joined rows and reports no further page", async () => {
+    h.state.selectQueue = [[historyRow()]];
+
+    const result = await listTransactionHistory(OWNER, baseQuery);
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      accountName: "بانک ملی",
+      categoryName: "خرید",
+      type: "expense",
+      amount: 15000,
+    });
+    expect(result.hasMore).toBe(false);
+    expect(result.page).toBe(1);
+    expect(result.pageSize).toBe(TRANSACTION_HISTORY_PAGE_SIZE);
+  });
+
+  it("returns a null category name when the join finds none", async () => {
+    h.state.selectQueue = [[historyRow({ categoryName: null })]];
+
+    const result = await listTransactionHistory(OWNER, baseQuery);
+
+    expect(result.items[0].categoryName).toBeNull();
+  });
+
+  it("slices to the page size and flags hasMore when an extra row is returned", async () => {
+    const rows = Array.from({ length: TRANSACTION_HISTORY_PAGE_SIZE + 1 }, (_, i) =>
+      historyRow({ id: `row-${i}` }),
+    );
+    h.state.selectQueue = [rows];
+
+    const result = await listTransactionHistory(OWNER, baseQuery);
+
+    expect(result.items).toHaveLength(TRANSACTION_HISTORY_PAGE_SIZE);
+    expect(result.hasMore).toBe(true);
+  });
+
+  it("always scopes the query to the session owner", async () => {
+    h.state.selectQueue = [[]];
+
+    await listTransactionHistory(OWNER, baseQuery);
+
+    const { sql, params } = new PgDialect().sqlToQuery(lastWhere() as never);
+    expect(sql).toContain("user_id");
+    expect(params).toContain(OWNER);
+  });
+
+  it("applies an account filter without dropping the owner scope", async () => {
+    h.state.selectQueue = [[]];
+
+    await listTransactionHistory(OWNER, { ...baseQuery, accountId: OTHER });
+
+    const { sql, params } = new PgDialect().sqlToQuery(lastWhere() as never);
+    expect(sql).toContain("user_id");
+    expect(sql).toContain("account_id");
+    expect(params).toContain(OWNER);
+    expect(params).toContain(OTHER);
+  });
+
+  it("applies type and inclusive date-range filters", async () => {
+    h.state.selectQueue = [[]];
+
+    await listTransactionHistory(OWNER, {
+      ...baseQuery,
+      type: "income",
+      from: "2026-01-01",
+      to: "2026-12-31",
+    });
+
+    const { sql, params } = new PgDialect().sqlToQuery(lastWhere() as never);
+    expect(sql).toContain("occurred_on");
+    expect(params).toContain("income");
+    expect(params).toContain("2026-01-01");
+    expect(params).toContain("2026-12-31");
+  });
+
+  it("normalizes a page below one to the first page", async () => {
+    h.state.selectQueue = [[]];
+
+    const result = await listTransactionHistory(OWNER, { ...baseQuery, page: 0 });
+
+    expect(result.page).toBe(1);
   });
 });

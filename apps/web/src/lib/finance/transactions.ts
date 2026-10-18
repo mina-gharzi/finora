@@ -1,11 +1,21 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { getDb } from "@/db";
-import { transactions, type TransactionRow } from "@/db/schema";
+import {
+  accounts,
+  categories,
+  transactions,
+  type TransactionRow,
+} from "@/db/schema";
 import { toFieldErrors } from "../validation";
 import { findAccountForUser } from "./accounts";
 import { findCategoryForUser } from "./categories";
 import { transactionInputSchema } from "./validation";
+import {
+  TRANSACTION_HISTORY_PAGE_SIZE,
+  type TransactionHistoryQuery,
+} from "./history-query";
+import type { TransactionType } from "./types";
 
 /**
  * Server-side data access for income/expense transactions.
@@ -19,6 +29,10 @@ import { transactionInputSchema } from "./validation";
  * never be borrowed across directions.
  *
  * Amounts are integer Toman, always positive; `type` carries the direction.
+ *
+ * Reads are equally strictly scoped: `listTransactions` and
+ * `listTransactionHistory` always filter by the session owner, so history
+ * filters can only narrow the owner's own rows.
  *
  * Deleting an account cascades to its transactions (see the FK), so a
  * transaction can never outlive its account.
@@ -86,6 +100,86 @@ export async function listTransactions(
     .from(transactions)
     .where(eq(transactions.userId, userId))
     .orderBy(desc(transactions.occurredOn), desc(transactions.createdAt));
+}
+
+/** A history row enriched with the names of its account and (optional) category. */
+export interface TransactionHistoryItem {
+  id: string;
+  type: TransactionType;
+  amount: number;
+  occurredOn: string;
+  note: string;
+  accountId: string;
+  accountName: string;
+  categoryName: string | null;
+}
+
+export interface TransactionHistoryResult {
+  items: TransactionHistoryItem[];
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
+/**
+ * A page of the owner's transaction history, newest first, joined to the owning
+ * account name and the optional category name.
+ *
+ * The owner predicate (`transactions.userId = userId`) is ALWAYS the first
+ * condition, so filters can only *narrow* the result set — a filter pointing at
+ * another user's account yields nothing rather than leaking it. Filters are
+ * already normalized by `parseTransactionHistoryQuery`; invalid values never
+ * reach here. Pagination reads one row beyond the page size to report `hasMore`
+ * without a second count query.
+ */
+export async function listTransactionHistory(
+  userId: string,
+  query: TransactionHistoryQuery,
+): Promise<TransactionHistoryResult> {
+  const pageSize = TRANSACTION_HISTORY_PAGE_SIZE;
+  const page = query.page >= 1 ? query.page : 1;
+  const offset = (page - 1) * pageSize;
+
+  const conditions = [eq(transactions.userId, userId)];
+  if (query.type) conditions.push(eq(transactions.type, query.type));
+  if (query.accountId) {
+    conditions.push(eq(transactions.accountId, query.accountId));
+  }
+  if (query.from) conditions.push(gte(transactions.occurredOn, query.from));
+  if (query.to) conditions.push(lte(transactions.occurredOn, query.to));
+
+  const rows = await getDb()
+    .select({
+      id: transactions.id,
+      type: transactions.type,
+      amount: transactions.amount,
+      occurredOn: transactions.occurredOn,
+      note: transactions.note,
+      accountId: transactions.accountId,
+      accountName: accounts.name,
+      categoryName: categories.name,
+    })
+    .from(transactions)
+    .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+    .leftJoin(categories, eq(transactions.categoryId, categories.id))
+    .where(and(...conditions))
+    .orderBy(desc(transactions.occurredOn), desc(transactions.createdAt))
+    .limit(pageSize + 1)
+    .offset(offset);
+
+  const hasMore = rows.length > pageSize;
+  const items = (hasMore ? rows.slice(0, pageSize) : rows).map((row) => ({
+    id: row.id,
+    type: row.type as TransactionType,
+    amount: row.amount,
+    occurredOn: row.occurredOn,
+    note: row.note,
+    accountId: row.accountId,
+    accountName: row.accountName,
+    categoryName: row.categoryName,
+  }));
+
+  return { items, page, pageSize, hasMore };
 }
 
 /**

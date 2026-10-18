@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { NavItem } from "@/components/ui/nav-item";
-import { COMING_SOON_LABEL, navGroups } from "./nav-config";
+import { COMING_SOON_LABEL, isNavEntryActive, navGroups } from "./nav-config";
 
 export interface MobileNavProps {
   open: boolean;
@@ -43,7 +43,7 @@ export function MobileNav({ open, activePath, onNavigate }: MobileNavProps) {
                   icon={item.icon}
                   href={item.href}
                   disabled={item.disabled}
-                  active={!item.disabled && item.href === activePath}
+                  active={isNavEntryActive(item, activePath)}
                   badge={
                     item.disabled ? (
                       <Badge variant="neutral">{COMING_SOON_LABEL}</Badge>

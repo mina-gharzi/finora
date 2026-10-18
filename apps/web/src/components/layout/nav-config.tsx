@@ -63,3 +63,18 @@ export const navGroups: { title: string; items: NavEntry[] }[] = [
 ];
 
 export const COMING_SOON_LABEL = "به‌زودی";
+
+/**
+ * Whether a navigation entry represents the current location. A destination is
+ * active for its exact path and for any nested route beneath it (e.g.
+ * `/transactions/new` keeps `/transactions` highlighted). Placeholders and the
+ * root path never match a prefix.
+ */
+export function isNavEntryActive(
+  entry: NavEntry,
+  activePath?: string,
+): boolean {
+  if (entry.disabled || !entry.href || !activePath) return false;
+  if (entry.href === activePath) return true;
+  return entry.href !== "/" && activePath.startsWith(`${entry.href}/`);
+}

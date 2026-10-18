@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
     insertedValues: [] as unknown[],
     insertCalls: 0,
     deleteCalls: 0,
+    whereConditions: [] as unknown[],
   },
 }));
 
