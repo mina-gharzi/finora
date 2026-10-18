@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   buildTransactionEditHref,
+  buildTransactionExportHref,
   buildTransactionHistoryHref,
   hasActiveTransactionFilters,
   parseTransactionHistoryQuery,
   parseTransactionReturnTo,
+  transactionSearchParamsToRecord,
   type TransactionHistoryQuery,
 } from "../history-query";
 
@@ -126,6 +128,66 @@ describe("buildTransactionHistoryHref", () => {
   it("includes page when greater than one", () => {
     const href = buildTransactionHistoryHref({ ...base, from: "2026-01-01" }, 4);
     expect(href).toBe("/transactions?from=2026-01-01&page=4");
+  });
+});
+
+describe("buildTransactionExportHref", () => {
+  const filters = {
+    type: null,
+    accountId: null,
+    from: null,
+    to: null,
+  };
+
+  it("returns the bare export path when no filter is active", () => {
+    expect(buildTransactionExportHref(filters)).toBe("/transactions/export");
+  });
+
+  it("carries every active filter", () => {
+    const href = buildTransactionExportHref({
+      type: "expense",
+      accountId: ACCOUNT_ID,
+      from: "2026-01-01",
+      to: "2026-12-31",
+    });
+    expect(href).toBe(
+      `/transactions/export?type=expense&accountId=${ACCOUNT_ID}&from=2026-01-01&to=2026-12-31`,
+    );
+  });
+
+  it("never carries a page number — an export is not paginated", () => {
+    // A full history query (which includes `page`) is still a valid filter
+    // input; the export link must ignore the pagination field.
+    const query: TransactionHistoryQuery = {
+      type: "income",
+      accountId: null,
+      from: null,
+      to: null,
+      page: 7,
+    };
+    expect(buildTransactionExportHref(query)).toBe(
+      "/transactions/export?type=income",
+    );
+  });
+});
+
+describe("transactionSearchParamsToRecord", () => {
+  it("converts a URLSearchParams into the record shape", () => {
+    const record = transactionSearchParamsToRecord(
+      new URLSearchParams("type=expense&from=2026-01-01"),
+    );
+    expect(record).toEqual({ type: "expense", from: "2026-01-01" });
+  });
+
+  it("keeps the first value of a repeated parameter", () => {
+    const record = transactionSearchParamsToRecord(
+      new URLSearchParams("type=expense&type=income&page=2&page=3"),
+    );
+    expect(record).toEqual({ type: "expense", page: "2" });
+  });
+
+  it("yields an empty record for an empty query string", () => {
+    expect(transactionSearchParamsToRecord(new URLSearchParams())).toEqual({});
   });
 });
 

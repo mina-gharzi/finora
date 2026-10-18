@@ -17,6 +17,9 @@ const h = vi.hoisted(() => ({
     updateCalls: 0,
     deleteCalls: 0,
     whereConditions: [] as unknown[],
+    limitArgs: [] as number[],
+    offsetArgs: [] as number[],
+    orderByArgs: [] as unknown[],
   },
 }));
 
@@ -30,6 +33,7 @@ import {
   deleteTransaction,
   findTransactionForUser,
   listTransactionHistory,
+  listTransactionHistoryForExport,
   listTransactions,
   updateTransaction,
 } from "@/lib/finance/transactions";
@@ -79,6 +83,9 @@ beforeEach(() => {
   h.state.updateCalls = 0;
   h.state.deleteCalls = 0;
   h.state.whereConditions = [];
+  h.state.limitArgs = [];
+  h.state.offsetArgs = [];
+  h.state.orderByArgs = [];
 });
 
 describe("createTransaction — ownership", () => {
@@ -521,5 +528,122 @@ describe("listTransactionHistory", () => {
     const result = await listTransactionHistory(OWNER, { ...baseQuery, page: 0 });
 
     expect(result.page).toBe(1);
+  });
+
+  it("applies limit and offset for the requested page", async () => {
+    h.state.selectQueue = [[]];
+
+    await listTransactionHistory(OWNER, { ...baseQuery, page: 3 });
+
+    expect(h.state.limitArgs).toEqual([TRANSACTION_HISTORY_PAGE_SIZE + 1]);
+    expect(h.state.offsetArgs).toEqual([
+      (3 - 1) * TRANSACTION_HISTORY_PAGE_SIZE,
+    ]);
+  });
+});
+
+describe("listTransactionHistoryForExport", () => {
+  const baseFilters = {
+    type: null,
+    accountId: null,
+    from: null,
+    to: null,
+  };
+
+  function historyRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "66666666-6666-4666-8666-666666666666",
+      type: "expense",
+      amount: 15000,
+      occurredOn: "2026-10-10",
+      note: "خرید روزانه",
+      accountId: ACCOUNT_ID,
+      accountName: "بانک ملی",
+      categoryName: "خرید",
+      ...overrides,
+    };
+  }
+
+  function lastWhere() {
+    return h.state.whereConditions[h.state.whereConditions.length - 1];
+  }
+
+  it("returns every matching row without any pagination cap", async () => {
+    const rows = Array.from({ length: TRANSACTION_HISTORY_PAGE_SIZE * 2 + 7 }, (_, i) =>
+      historyRow({ id: `row-${i}` }),
+    );
+    h.state.selectQueue = [rows];
+
+    const result = await listTransactionHistoryForExport(OWNER, baseFilters);
+
+    expect(result).toHaveLength(TRANSACTION_HISTORY_PAGE_SIZE * 2 + 7);
+    expect(h.state.limitArgs).toEqual([]);
+    expect(h.state.offsetArgs).toEqual([]);
+  });
+
+  it("always scopes the query to the session owner", async () => {
+    h.state.selectQueue = [[]];
+
+    await listTransactionHistoryForExport(OWNER, baseFilters);
+
+    const { sql, params } = new PgDialect().sqlToQuery(lastWhere() as never);
+    expect(sql).toContain("user_id");
+    expect(params).toContain(OWNER);
+  });
+
+  it("applies the type, account and date-range filters in SQL", async () => {
+    h.state.selectQueue = [[]];
+
+    await listTransactionHistoryForExport(OWNER, {
+      type: "income",
+      accountId: ACCOUNT_ID,
+      from: "2026-01-01",
+      to: "2026-12-31",
+    });
+
+    const { sql, params } = new PgDialect().sqlToQuery(lastWhere() as never);
+    expect(sql).toContain("user_id");
+    expect(sql).toContain("type");
+    expect(sql).toContain("account_id");
+    expect(sql).toContain("occurred_on");
+    expect(params).toContain(OWNER);
+    expect(params).toContain("income");
+    expect(params).toContain(ACCOUNT_ID);
+    expect(params).toContain("2026-01-01");
+    expect(params).toContain("2026-12-31");
+  });
+
+  it("orders by newest first with a stable tiebreaker", async () => {
+    h.state.selectQueue = [[]];
+
+    await listTransactionHistoryForExport(OWNER, baseFilters);
+
+    const clauses = h.state.orderByArgs[0] as unknown[];
+    const dialect = new PgDialect();
+    expect(clauses).toHaveLength(2);
+    expect(dialect.sqlToQuery(clauses[0] as never).sql).toContain("occurred_on");
+    expect(dialect.sqlToQuery(clauses[1] as never).sql).toContain("created_at");
+  });
+
+  it("maps joined rows and preserves a null category name", async () => {
+    h.state.selectQueue = [[historyRow({ categoryName: null })]];
+
+    const result = await listTransactionHistoryForExport(OWNER, baseFilters);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: "expense",
+      amount: 15000,
+      accountName: "بانک ملی",
+      categoryName: null,
+    });
+  });
+
+  it("returns an empty list when nothing matches", async () => {
+    h.state.selectQueue = [[]];
+
+    await expect(
+      listTransactionHistoryForExport(OWNER, baseFilters),
+    ).resolves.toEqual([]);
   });
 });

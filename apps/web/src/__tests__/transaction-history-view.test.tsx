@@ -86,6 +86,7 @@ function renderView(overrides: Partial<TransactionHistoryViewProps> = {}) {
       hasActiveFilters={false}
       editHrefFor={(id) => `/transactions/${id}/edit`}
       deleteReturnTo="/transactions"
+      exportHref="/transactions/export"
       {...overrides}
     />,
   );
@@ -130,6 +131,15 @@ describe("TransactionHistoryView — rows", () => {
     for (const link of links) {
       expect(link.getAttribute("href")).toBe("/transactions/new");
     }
+  });
+
+  it("offers a CSV export link pointing at the provided export href", () => {
+    renderView({ exportHref: "/transactions/export?type=expense" });
+
+    const link = screen.getByRole("link", { name: "خروجی CSV" });
+    expect(link.getAttribute("href")).toBe(
+      "/transactions/export?type=expense",
+    );
   });
 });
 
@@ -262,6 +272,13 @@ describe("TransactionHistoryView — empty states", () => {
     ).toBeTruthy();
     const link = screen.getByRole("link", { name: "نمایش همه تراکنش‌ها" });
     expect(link.getAttribute("href")).toBe("/transactions");
+  });
+
+  it("keeps the export link available for an empty result", () => {
+    renderView({ items: [] });
+
+    const link = screen.getByRole("link", { name: "خروجی CSV" });
+    expect(link.getAttribute("href")).toBe("/transactions/export");
   });
 });
 

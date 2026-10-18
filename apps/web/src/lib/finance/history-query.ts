@@ -101,6 +101,41 @@ export function buildTransactionHistoryHref(
 }
 
 /**
+ * Builds the CSV export link for the given filters. The page number is
+ * deliberately NOT included: an export always covers every matching record,
+ * not just the visible page.
+ */
+export function buildTransactionExportHref(
+  query: TransactionHistoryFilters,
+): string {
+  const search = new URLSearchParams();
+  if (query.type) search.set("type", query.type);
+  if (query.accountId) search.set("accountId", query.accountId);
+  if (query.from) search.set("from", query.from);
+  if (query.to) search.set("to", query.to);
+
+  const queryString = search.toString();
+  return queryString ? `/transactions/export?${queryString}` : "/transactions/export";
+}
+
+/**
+ * Converts a `URLSearchParams` into the record shape the parser accepts,
+ * keeping the FIRST value of a repeated parameter so the export route
+ * resolves a query string exactly like the history page does.
+ */
+export function transactionSearchParamsToRecord(
+  params: URLSearchParams,
+): TransactionHistorySearchParams {
+  const record: TransactionHistorySearchParams = {};
+  for (const [key, value] of params) {
+    if (!(key in record)) {
+      record[key] = value;
+    }
+  }
+  return record;
+}
+
+/**
  * Builds the edit link for `transactionId`, carrying the current history filters
  * and page as a `returnTo` parameter so a successful save returns the user to
  * exactly where they were.

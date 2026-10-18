@@ -3,6 +3,10 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
+  // Every test registers a throwaway account against the same local Postgres;
+  // the default worker count (≈ CPU count) saturates it and makes registration
+  // flaky, so keep a small, deterministic pool.
+  workers: 2,
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: "list",

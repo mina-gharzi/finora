@@ -18,6 +18,12 @@ export interface FakeDbState {
   deleteCalls: number;
   /** Conditions passed to `.where(...)`, in call order (for scope assertions). */
   whereConditions: unknown[];
+  /** Arguments passed to `.limit(...)`, in call order (optional recorder). */
+  limitArgs?: number[];
+  /** Arguments passed to `.offset(...)`, in call order (optional recorder). */
+  offsetArgs?: number[];
+  /** Arguments passed to `.orderBy(...)`, in call order (optional recorder). */
+  orderByArgs?: unknown[];
 }
 
 interface Chain extends PromiseLike<unknown[]> {
@@ -26,9 +32,9 @@ interface Chain extends PromiseLike<unknown[]> {
   innerJoin: () => Chain;
   leftJoin: () => Chain;
   groupBy: () => Chain;
-  limit: () => Chain;
-  offset: () => Chain;
-  orderBy: () => Chain;
+  limit: (count?: number) => Chain;
+  offset: (count?: number) => Chain;
+  orderBy: (...clauses: unknown[]) => Chain;
   values: (value: unknown) => Chain;
   set: (value: unknown) => Chain;
   returning: () => Promise<unknown[]>;
@@ -44,9 +50,18 @@ function makeChain(resolveTo: unknown[], state: FakeDbState): Chain {
     innerJoin: () => chain,
     leftJoin: () => chain,
     groupBy: () => chain,
-    limit: () => chain,
-    offset: () => chain,
-    orderBy: () => chain,
+    limit: (count) => {
+      if (count !== undefined) state.limitArgs?.push(count);
+      return chain;
+    },
+    offset: (count) => {
+      if (count !== undefined) state.offsetArgs?.push(count);
+      return chain;
+    },
+    orderBy: (...clauses) => {
+      state.orderByArgs?.push(clauses);
+      return chain;
+    },
     values: (value: unknown) => {
       state.insertedValues.push(value);
       return chain;
@@ -92,5 +107,8 @@ export function createFakeDbState(): FakeDbState {
     updateCalls: 0,
     deleteCalls: 0,
     whereConditions: [],
+    limitArgs: [],
+    offsetArgs: [],
+    orderByArgs: [],
   };
 }

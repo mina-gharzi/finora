@@ -13,6 +13,7 @@ import { findCategoryForUser } from "./categories";
 import { transactionIdSchema, transactionInputSchema } from "./validation";
 import {
   TRANSACTION_HISTORY_PAGE_SIZE,
+  type TransactionHistoryFilters,
   type TransactionHistoryQuery,
 } from "./history-query";
 import type { TransactionType } from "./types";
@@ -214,6 +215,87 @@ export interface TransactionHistoryResult {
 }
 
 /**
+ * Owner predicate plus the optional narrowing filters. The owner condition is
+ * ALWAYS first, so filters can only *narrow* the result set — a filter pointing
+ * at another user's account yields nothing rather than leaking it.
+ */
+function buildHistoryConditions(
+  userId: string,
+  filters: TransactionHistoryFilters,
+) {
+  const conditions = [eq(transactions.userId, userId)];
+  if (filters.type) conditions.push(eq(transactions.type, filters.type));
+  if (filters.accountId) {
+    conditions.push(eq(transactions.accountId, filters.accountId));
+  }
+  if (filters.from) conditions.push(gte(transactions.occurredOn, filters.from));
+  if (filters.to) conditions.push(lte(transactions.occurredOn, filters.to));
+  return conditions;
+}
+
+/** The shared newest-first history join used by the list and the CSV export. */
+async function selectHistoryRows(
+  userId: string,
+  filters: TransactionHistoryFilters,
+  page?: { limit: number; offset: number },
+): Promise<
+  {
+    id: string;
+    type: string;
+    amount: number;
+    occurredOn: string;
+    note: string;
+    accountId: string;
+    accountName: string;
+    categoryName: string | null;
+  }[]
+> {
+  const query = getDb()
+    .select({
+      id: transactions.id,
+      type: transactions.type,
+      amount: transactions.amount,
+      occurredOn: transactions.occurredOn,
+      note: transactions.note,
+      accountId: transactions.accountId,
+      accountName: accounts.name,
+      categoryName: categories.name,
+    })
+    .from(transactions)
+    .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+    .leftJoin(categories, eq(transactions.categoryId, categories.id))
+    .where(and(...buildHistoryConditions(userId, filters)))
+    .orderBy(desc(transactions.occurredOn), desc(transactions.createdAt));
+
+  if (page) {
+    return query.limit(page.limit).offset(page.offset);
+  }
+  return query;
+}
+
+function toHistoryItem(row: {
+  id: string;
+  type: string;
+  amount: number;
+  occurredOn: string;
+  note: string;
+  accountId: string;
+  accountName: string;
+  categoryName: string | null;
+}): TransactionHistoryItem {
+  return {
+    id: row.id,
+    type: row.type as TransactionType,
+    amount: row.amount,
+    occurredOn: row.occurredOn,
+    note: row.note,
+    accountId: row.accountId,
+    accountName: row.accountName,
+    categoryName: row.categoryName,
+  };
+}
+
+/**
  * A page of the owner's transaction history, newest first, joined to the owning
  * account name and the optional category name.
  *
@@ -232,46 +314,32 @@ export async function listTransactionHistory(
   const page = query.page >= 1 ? query.page : 1;
   const offset = (page - 1) * pageSize;
 
-  const conditions = [eq(transactions.userId, userId)];
-  if (query.type) conditions.push(eq(transactions.type, query.type));
-  if (query.accountId) {
-    conditions.push(eq(transactions.accountId, query.accountId));
-  }
-  if (query.from) conditions.push(gte(transactions.occurredOn, query.from));
-  if (query.to) conditions.push(lte(transactions.occurredOn, query.to));
-
-  const rows = await getDb()
-    .select({
-      id: transactions.id,
-      type: transactions.type,
-      amount: transactions.amount,
-      occurredOn: transactions.occurredOn,
-      note: transactions.note,
-      accountId: transactions.accountId,
-      accountName: accounts.name,
-      categoryName: categories.name,
-    })
-    .from(transactions)
-    .innerJoin(accounts, eq(transactions.accountId, accounts.id))
-    .leftJoin(categories, eq(transactions.categoryId, categories.id))
-    .where(and(...conditions))
-    .orderBy(desc(transactions.occurredOn), desc(transactions.createdAt))
-    .limit(pageSize + 1)
-    .offset(offset);
+  const rows = await selectHistoryRows(userId, query, {
+    limit: pageSize + 1,
+    offset,
+  });
 
   const hasMore = rows.length > pageSize;
-  const items = (hasMore ? rows.slice(0, pageSize) : rows).map((row) => ({
-    id: row.id,
-    type: row.type as TransactionType,
-    amount: row.amount,
-    occurredOn: row.occurredOn,
-    note: row.note,
-    accountId: row.accountId,
-    accountName: row.accountName,
-    categoryName: row.categoryName,
-  }));
+  const items = (hasMore ? rows.slice(0, pageSize) : rows).map(toHistoryItem);
 
   return { items, page, pageSize, hasMore };
+}
+
+/**
+ * EVERY matching transaction owned by `userId`, newest first — the CSV export
+ * counterpart of `listTransactionHistory` with no pagination cap, so a large
+ * history is never truncated by the 20-row page size.
+ *
+ * The query is still pushed down to the database with the same owner-scoped
+ * conditions (never "fetch all rows and filter in memory"), and it is not
+ * buffered into memory beyond a single result set.
+ */
+export async function listTransactionHistoryForExport(
+  userId: string,
+  filters: TransactionHistoryFilters,
+): Promise<TransactionHistoryItem[]> {
+  const rows = await selectHistoryRows(userId, filters);
+  return rows.map(toHistoryItem);
 }
 
 /**

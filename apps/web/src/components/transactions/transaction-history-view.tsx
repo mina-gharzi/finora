@@ -37,6 +37,9 @@ const PAGINATION_LINK =
 const ACTION_LINK =
   "inline-flex h-8 items-center justify-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-foreground transition-colors hover:bg-surface-muted";
 
+const HEADER_LINK =
+  "inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-border bg-surface px-4 text-sm font-medium text-foreground transition-colors hover:bg-surface-muted";
+
 export interface TransactionHistoryFiltersView {
   /** Empty string means "no filter" (all values). */
   type: string;
@@ -59,6 +62,11 @@ export interface TransactionHistoryViewProps {
   editHrefFor: (transactionId: string) => string;
   /** Same-app path the user returns to after deleting a row. */
   deleteReturnTo: string;
+  /**
+   * CSV export download for the current filters (all matching rows, not just
+   * this page).
+   */
+  exportHref: string;
   /** Optional success notice shown after a downstream edit. */
   savedMessage?: string;
 }
@@ -78,6 +86,7 @@ export function TransactionHistoryView({
   hasActiveFilters,
   editHrefFor,
   deleteReturnTo,
+  exportHref,
   savedMessage,
 }: TransactionHistoryViewProps) {
   const showOnboarding = !hasActiveFilters && page === 1;
@@ -91,12 +100,17 @@ export function TransactionHistoryView({
             درآمدها و هزینه‌های ثبت‌شده خود را مرور کنید.
           </p>
         </div>
-        <Link
-          href="/transactions/new"
-          className="inline-flex h-10 shrink-0 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
-        >
-          افزودن تراکنش
-        </Link>
+        <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+          <Link
+            href="/transactions/new"
+            className="inline-flex h-10 shrink-0 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
+          >
+            افزودن تراکنش
+          </Link>
+          <Link href={exportHref} className={HEADER_LINK}>
+            خروجی CSV
+          </Link>
+        </div>
       </header>
 
       {savedMessage && <Alert variant="success">{savedMessage}</Alert>}

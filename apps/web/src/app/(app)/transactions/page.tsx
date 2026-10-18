@@ -6,6 +6,7 @@ import { requireUserId } from "@/lib/dal";
 import { listAccounts } from "@/lib/finance/accounts";
 import {
   buildTransactionEditHref,
+  buildTransactionExportHref,
   buildTransactionHistoryHref,
   hasActiveTransactionFilters,
   parseTransactionHistoryQuery,
@@ -70,6 +71,7 @@ async function AuthenticatedTransactionHistory({
         buildTransactionEditHref(transactionId, query, history.page)
       }
       deleteReturnTo={returnHref}
+      exportHref={buildTransactionExportHref(query)}
       savedMessage={
         hasUpdatedMarker(search) ? "تراکنش با موفقیت ویرایش شد." : undefined
       }
