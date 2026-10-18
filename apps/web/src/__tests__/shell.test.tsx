@@ -54,18 +54,21 @@ describe("AppShell", () => {
     expect(aside).not.toBeNull();
     if (!aside) return;
 
-    expect(aside.querySelectorAll("a")).toHaveLength(2);
+    expect(aside.querySelectorAll("a")).toHaveLength(3);
 
     const current = screen.getByRole("link", { name: "داشبورد" });
     expect(current.getAttribute("aria-current")).toBe("page");
     expect(current.getAttribute("href")).toBe("/");
+
+    const transactions = screen.getByRole("link", { name: "تراکنش‌ها" });
+    expect(transactions.getAttribute("href")).toBe("/transactions");
 
     const accounts = screen.getByRole("link", { name: "حساب‌ها" });
     expect(accounts.getAttribute("href")).toBe("/accounts");
 
     expect(
       aside.querySelectorAll('[aria-disabled="true"]'),
-    ).toHaveLength(4);
+    ).toHaveLength(3);
     expect(aside.querySelectorAll("li")).toHaveLength(6);
     expect(aside.textContent).toContain("به‌زودی");
   });

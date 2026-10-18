@@ -33,7 +33,7 @@ const ACCOUNT_ID = "33333333-3333-4333-8333-333333333333";
 const CATEGORY_ID = "44444444-4444-4444-8444-444444444444";
 
 const ownedAccount = { id: ACCOUNT_ID, userId: OWNER };
-const ownedCategory = { id: CATEGORY_ID, userId: OWNER };
+const ownedCategory = { id: CATEGORY_ID, userId: OWNER, kind: "expense" };
 
 function transactionRow(overrides: Partial<TransactionRow> = {}): TransactionRow {
   return {
@@ -143,6 +143,19 @@ describe("createTransaction — ownership", () => {
 
     expect(result.ok).toBe(true);
     expect(h.state.insertedValues[0]).toMatchObject({ categoryId: CATEGORY_ID });
+  });
+
+  it("refuses a category whose kind does not match the transaction type", async () => {
+    h.state.selectQueue = [[ownedAccount], [{ ...ownedCategory, kind: "income" }]];
+
+    const result = await createTransaction(OWNER, {
+      ...baseInput,
+      categoryId: CATEGORY_ID,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.fieldErrors.categoryId).toBeTruthy();
+    expect(h.state.insertCalls).toBe(0);
   });
 
   it("ignores a forged userId supplied by the client", async () => {

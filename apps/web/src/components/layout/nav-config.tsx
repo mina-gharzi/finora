@@ -41,8 +41,8 @@ export const navGroups: { title: string; items: NavEntry[] }[] = [
       {
         key: "transactions",
         label: "تراکنش‌ها",
+        href: "/transactions",
         icon: <TransactionsIcon />,
-        disabled: true,
       },
       {
         key: "accounts",

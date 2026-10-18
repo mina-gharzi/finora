@@ -14,7 +14,9 @@ import { transactionInputSchema } from "./validation";
  * session (never from client input), and every write first checks that the
  * referenced account — and, when present, the referenced category — is owned by
  * that same session user. A client can therefore never post a transaction onto
- * another user's account, nor attach another user's category.
+ * another user's account, nor attach another user's category. A category must
+ * additionally match the transaction `type` (income/expense), so a category can
+ * never be borrowed across directions.
  *
  * Amounts are integer Toman, always positive; `type` carries the direction.
  *
@@ -28,6 +30,8 @@ export type CreateTransactionResult =
 
 const ACCOUNT_NOT_FOUND = "حساب موردنظر یافت نشد.";
 const CATEGORY_NOT_FOUND = "دسته‌بندی موردنظر یافت نشد.";
+const CATEGORY_TYPE_MISMATCH =
+  "دسته‌بندی انتخاب‌شده با نوع تراکنش هم‌خوانی ندارد.";
 
 /**
  * Validates `input`, verifies that the referenced account (and optional
@@ -55,6 +59,13 @@ export async function createTransaction(
     const category = await findCategoryForUser(categoryId, userId);
     if (!category) {
       return { ok: false, fieldErrors: { categoryId: CATEGORY_NOT_FOUND } };
+    }
+
+    // A category is bound to a direction ("income" or "expense"); attaching an
+    // income category to an expense (or vice versa) would corrupt reporting, so
+    // it is rejected even though ownership is valid.
+    if (category.kind !== parsed.data.type) {
+      return { ok: false, fieldErrors: { categoryId: CATEGORY_TYPE_MISMATCH } };
     }
   }
 
