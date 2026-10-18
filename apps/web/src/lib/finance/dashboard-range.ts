@@ -28,7 +28,7 @@ export type DashboardPeriod = (typeof DASHBOARD_PERIODS)[number];
 export const DEFAULT_DASHBOARD_PERIOD: DashboardPeriod = "this-month";
 
 /** Persian month names, indexed by Jalali month number (1 = فروردین). */
-const JALALI_MONTHS = [
+export const JALALI_MONTHS = [
   "فروردین",
   "اردیبهشت",
   "خرداد",
@@ -74,18 +74,18 @@ export function addDays(iso: string, days: number): string {
   return toIso(date);
 }
 
-function jalaliParts(iso: string) {
+export function jalaliParts(iso: string) {
   return formatJalaliDateParts(toUtcDate(iso));
 }
 
 /** First day of the Jalali month containing `iso`. */
-function startOfJalaliMonth(iso: string): string {
+export function startOfJalaliMonth(iso: string): string {
   const { day } = jalaliParts(iso);
   return addDays(iso, -(day - 1));
 }
 
 /** First day of the Jalali month after the one containing `iso`. */
-function startOfNextJalaliMonth(iso: string): string {
+export function startOfNextJalaliMonth(iso: string): string {
   const start = startOfJalaliMonth(iso);
   const { year, month } = jalaliParts(start);
 
@@ -104,7 +104,7 @@ function startOfNextJalaliMonth(iso: string): string {
 }
 
 /** Last day of the Jalali month containing `iso` (inclusive). */
-function endOfJalaliMonth(iso: string): string {
+export function endOfJalaliMonth(iso: string): string {
   return addDays(startOfNextJalaliMonth(iso), -1);
 }
 

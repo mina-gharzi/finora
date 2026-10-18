@@ -59,7 +59,7 @@ describe("AppShell", () => {
     expect(aside).not.toBeNull();
     if (!aside) return;
 
-    expect(aside.querySelectorAll("a")).toHaveLength(4);
+    expect(aside.querySelectorAll("a")).toHaveLength(5);
 
     const current = screen.getByRole("link", { name: "داشبورد" });
     expect(current.getAttribute("aria-current")).toBe("page");
@@ -74,9 +74,13 @@ describe("AppShell", () => {
     const categories = screen.getByRole("link", { name: "دسته‌بندی‌ها" });
     expect(categories.getAttribute("href")).toBe("/categories");
 
+    const reports = screen.getByRole("link", { name: "گزارش‌ها" });
+    expect(reports.getAttribute("href")).toBe("/reports");
+
+    // Only budgets and settings remain disabled placeholders.
     expect(
       aside.querySelectorAll('[aria-disabled="true"]'),
-    ).toHaveLength(3);
+    ).toHaveLength(2);
     expect(aside.querySelectorAll("li")).toHaveLength(7);
     expect(aside.textContent).toContain("به‌زودی");
   });
