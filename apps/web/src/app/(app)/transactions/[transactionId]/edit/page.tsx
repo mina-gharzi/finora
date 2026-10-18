@@ -50,20 +50,43 @@ async function AuthenticatedEditTransaction({
     notFound();
   }
 
-  const [accounts, categories] = await Promise.all([
+  const [allAccounts, categories] = await Promise.all([
     listAccounts(userId),
     listCategories(userId),
   ]);
+
+  // Active accounts are the eligible options. If this transaction already sits
+  // on an archived account, that account is included (badged) so the row stays
+  // editable in place — but no *other* archived account is offered, and the
+  // server rejects any attempt to move a transaction onto one.
+  const activeAccounts = allAccounts.filter((account) => !account.archived);
+  const currentAccount = allAccounts.find(
+    (account) => account.id === transaction.accountId,
+  );
+  const accountOptions =
+    currentAccount && currentAccount.archived
+      ? [
+          {
+            id: currentAccount.id,
+            name: `${currentAccount.name} (بایگانی‌شده)`,
+            archived: true as const,
+          },
+          ...activeAccounts.map((account) => ({
+            id: account.id,
+            name: account.name,
+          })),
+        ]
+      : activeAccounts.map((account) => ({
+          id: account.id,
+          name: account.name,
+        }));
 
   const returnHref = parseTransactionReturnTo((await searchParams).returnTo);
 
   return (
     <EditTransactionView
       transactionId={transaction.id}
-      accounts={accounts.map((account) => ({
-        id: account.id,
-        name: account.name,
-      }))}
+      accounts={accountOptions}
       categories={categories.map((category) => ({
         id: category.id,
         name: category.name,

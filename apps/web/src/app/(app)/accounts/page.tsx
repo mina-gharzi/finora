@@ -4,6 +4,7 @@ import { AccountsView } from "@/components/accounts/accounts-view";
 import { Spinner } from "@/components/ui/spinner";
 import { requireUserId } from "@/lib/dal";
 import { listAccounts } from "@/lib/finance/accounts";
+import { getAccountBalances } from "@/lib/finance/dashboard";
 
 export const metadata: Metadata = {
   title: "حساب‌ها",
@@ -11,8 +12,17 @@ export const metadata: Metadata = {
 
 async function AuthenticatedAccounts() {
   const userId = await requireUserId();
-  const accounts = await listAccounts(userId);
-  return <AccountsView accounts={accounts} />;
+  const [accounts, balances] = await Promise.all([
+    listAccounts(userId),
+    getAccountBalances(userId),
+  ]);
+
+  const balanceById: Record<string, number> = {};
+  for (const balance of balances) {
+    balanceById[balance.id] = balance.balance;
+  }
+
+  return <AccountsView accounts={accounts} balanceById={balanceById} />;
 }
 
 function AccountsFallback() {

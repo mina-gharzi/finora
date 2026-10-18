@@ -236,6 +236,9 @@ export function DashboardView({
                         >
                           {ACCOUNT_TYPE_LABELS[account.type] ?? account.type}
                         </Badge>
+                        {account.archived && (
+                          <Badge variant="warning">بایگانی‌شده</Badge>
+                        )}
                       </div>
                       <span className="shrink-0 font-medium text-foreground">
                         {formatSigned(account.balance)}

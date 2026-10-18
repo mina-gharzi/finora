@@ -8,9 +8,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { cn } from "@/lib/cn";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/finance/account-labels";
 import type { AccountType } from "@/lib/finance/types";
 import type { AccountRow } from "@/db/schema";
+import { ArchiveAccountButton } from "./archive-account-button";
 import { CreateAccountForm } from "./create-account-form";
 import { DeleteAccountButton } from "./delete-account-button";
 
@@ -28,7 +30,24 @@ function accountTypeBadge(type: string): BadgeVariant {
   return TYPE_BADGE[type as AccountType] ?? "neutral";
 }
 
-export function AccountsView({ accounts }: { accounts: AccountRow[] }) {
+export interface AccountsViewProps {
+  accounts: AccountRow[];
+  /** Current balance per account id (`opening + income - expense`, full history). */
+  balanceById: Record<string, number>;
+}
+
+/**
+ * Account-management view. Active accounts are listed first (newest first
+ * within each group); archived accounts stay visible — clearly badged and
+ * muted — so historical ownership remains discoverable, but they can no longer
+ * be picked for new transactions. Archiving never deletes anything, which is
+ * why the delete action sits alongside it as the guarded, permanent option.
+ */
+export function AccountsView({ accounts, balanceById }: AccountsViewProps) {
+  const ordered = [...accounts].sort(
+    (a, b) => Number(a.archived) - Number(b.archived),
+  );
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <header className="flex flex-col gap-1">
@@ -51,7 +70,7 @@ export function AccountsView({ accounts }: { accounts: AccountRow[] }) {
         <h2 id="accounts-list-title" className="text-lg font-semibold text-foreground">
           حساب‌های شما
         </h2>
-        {accounts.length === 0 ? (
+        {ordered.length === 0 ? (
           <EmptyState
             icon={<WalletIcon width={24} height={24} />}
             title="هنوز حسابی ثبت نشده است"
@@ -59,27 +78,41 @@ export function AccountsView({ accounts }: { accounts: AccountRow[] }) {
           />
         ) : (
           <ul className="flex flex-col gap-3">
-            {accounts.map((account) => (
+            {ordered.map((account) => (
               <li key={account.id}>
-                <Card>
+                <Card className={cn(account.archived && "opacity-75")}>
                   <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 flex-col gap-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate font-medium text-foreground">
                           {account.name}
                         </span>
                         <Badge variant={accountTypeBadge(account.type)}>
                           {accountTypeLabel(account.type)}
                         </Badge>
+                        {account.archived && (
+                          <Badge variant="warning">بایگانی‌شده</Badge>
+                        )}
                       </div>
                       <span className="text-sm text-muted-foreground">
-                        موجودی اولیه: {formatTomanWithUnit(account.openingBalance)}
+                        موجودی فعلی:{" "}
+                        {formatTomanWithUnit(balanceById[account.id] ?? 0)}
+                        {" · "}
+                        موجودی اولیه:{" "}
+                        {formatTomanWithUnit(account.openingBalance)}
                       </span>
                     </div>
-                    <DeleteAccountButton
-                      accountId={account.id}
-                      accountName={account.name}
-                    />
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <ArchiveAccountButton
+                        accountId={account.id}
+                        accountName={account.name}
+                        archived={account.archived}
+                      />
+                      <DeleteAccountButton
+                        accountId={account.id}
+                        accountName={account.name}
+                      />
+                    </div>
                   </CardContent>
                 </Card>
               </li>

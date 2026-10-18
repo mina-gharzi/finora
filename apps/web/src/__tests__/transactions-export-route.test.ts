@@ -44,6 +44,7 @@ function item(
     note: "",
     accountId: ACCOUNT_ID,
     accountName: "بانک ملی",
+    accountArchived: false,
     categoryName: "خرید",
     ...overrides,
   };

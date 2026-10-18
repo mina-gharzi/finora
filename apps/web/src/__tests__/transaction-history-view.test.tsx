@@ -58,6 +58,7 @@ const ITEMS: TransactionHistoryViewProps["items"] = [
     note: "حقوق مهر",
     accountId: "acc-1",
     accountName: "بانک ملی",
+    accountArchived: false,
     categoryName: "حقوق",
   },
   {
@@ -68,6 +69,7 @@ const ITEMS: TransactionHistoryViewProps["items"] = [
     note: "",
     accountId: "acc-2",
     accountName: "کیف پول",
+    accountArchived: false,
     categoryName: null,
   },
 ];
@@ -279,6 +281,34 @@ describe("TransactionHistoryView — empty states", () => {
 
     const link = screen.getByRole("link", { name: "خروجی CSV" });
     expect(link.getAttribute("href")).toBe("/transactions/export");
+  });
+});
+
+describe("TransactionHistoryView — archived accounts", () => {
+  it("marks an archived account in the filter options", () => {
+    renderView({
+      accounts: [{ id: "acc-9", name: "حساب قدیمی", archived: true }],
+    });
+
+    const account = screen.getByLabelText("حساب");
+    expect(
+      within(account).getByRole("option", {
+        name: "حساب قدیمی (بایگانی‌شده)",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("badges a row whose account is archived", () => {
+    renderView({ items: [{ ...ITEMS[0], accountArchived: true }] });
+
+    const table = screen.getByRole("table", { name: "فهرست تراکنش‌ها" });
+    expect(within(table).getByText("بایگانی‌شده")).toBeTruthy();
+  });
+
+  it("does not badge rows of active accounts", () => {
+    renderView({ items: [ITEMS[0]] });
+
+    expect(screen.queryByText("بایگانی‌شده")).toBeNull();
   });
 });
 

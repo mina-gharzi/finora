@@ -35,8 +35,8 @@ const BASE_PROPS: DashboardViewProps = {
     { categoryId: null, categoryName: null, amount: 50_000 },
   ],
   accountBalances: [
-    { id: "acc-1", name: "نقدی خانه", type: "cash", balance: 880_000 },
-    { id: "acc-2", name: "پس‌انداز بانک", type: "bank", balance: 0 },
+    { id: "acc-1", name: "نقدی خانه", type: "cash", archived: false, balance: 880_000 },
+    { id: "acc-2", name: "پس‌انداز بانک", type: "bank", archived: false, balance: 0 },
   ],
   recentTransactions: [
     {

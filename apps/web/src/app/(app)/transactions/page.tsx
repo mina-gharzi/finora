@@ -48,6 +48,7 @@ async function AuthenticatedTransactionHistory({
       accounts={accounts.map((account) => ({
         id: account.id,
         name: account.name,
+        archived: account.archived,
       }))}
       filters={{
         type: query.type ?? "",

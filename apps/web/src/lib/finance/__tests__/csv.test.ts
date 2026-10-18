@@ -23,6 +23,7 @@ function item(overrides: Partial<TransactionHistoryItem> = {}): TransactionHisto
     note: "",
     accountId: "33333333-3333-4333-8333-333333333333",
     accountName: "بانک ملی",
+    accountArchived: false,
     categoryName: "خرید",
     ...overrides,
   };

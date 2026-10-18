@@ -9,7 +9,13 @@ import {
 } from "./create-transaction-form";
 
 export interface TransactionsViewProps {
+  /** Active (non-archived) accounts, eligible for new transactions. */
   accounts: AccountOption[];
+  /**
+   * True when the user owns at least one account, archived or not. Combined
+   * with an empty `accounts` list it means "all accounts are archived".
+   */
+  hasAnyAccounts: boolean;
   categories: CategoryOption[];
   /** Gregorian `YYYY-MM-DD` used as the date field's initial value. */
   defaultDate: string;
@@ -22,6 +28,7 @@ export interface TransactionsViewProps {
  */
 export function TransactionsView({
   accounts,
+  hasAnyAccounts,
   categories,
   defaultDate,
 }: TransactionsViewProps) {
@@ -35,19 +42,35 @@ export function TransactionsView({
       </header>
 
       {accounts.length === 0 ? (
-        <EmptyState
-          icon={<WalletIcon width={24} height={24} />}
-          title="برای ثبت تراکنش ابتدا یک حساب بسازید"
-          description="تراکنش‌ها همیشه به یک حساب تعلق دارند؛ پس از ساخت اولین حساب می‌توانید درآمد و هزینه ثبت کنید."
-          action={
-            <Link
-              href="/accounts"
-              className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-surface px-4 text-sm font-medium text-foreground transition-colors hover:bg-surface-muted"
-            >
-              افزودن حساب
-            </Link>
-          }
-        />
+        hasAnyAccounts ? (
+          <EmptyState
+            icon={<WalletIcon width={24} height={24} />}
+            title="همه حساب‌های شما بایگانی شده‌اند"
+            description="برای ثبت تراکنش جدید، یک حساب را از بایگانی خارج کنید یا حساب تازه‌ای بسازید؛ تراکنش‌های قبلی حساب‌های بایگانی‌شده همچنان در دسترس‌اند."
+            action={
+              <Link
+                href="/accounts"
+                className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-surface px-4 text-sm font-medium text-foreground transition-colors hover:bg-surface-muted"
+              >
+                مدیریت حساب‌ها
+              </Link>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={<WalletIcon width={24} height={24} />}
+            title="برای ثبت تراکنش ابتدا یک حساب بسازید"
+            description="تراکنش‌ها همیشه به یک حساب تعلق دارند؛ پس از ساخت اولین حساب می‌توانید درآمد و هزینه ثبت کنید."
+            action={
+              <Link
+                href="/accounts"
+                className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-surface px-4 text-sm font-medium text-foreground transition-colors hover:bg-surface-muted"
+              >
+                افزودن حساب
+              </Link>
+            }
+          />
+        )
       ) : (
         <Card>
           <CardHeader>

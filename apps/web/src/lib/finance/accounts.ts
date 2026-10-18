@@ -1,9 +1,9 @@
 import "server-only";
-import { count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { accounts, transactions, type AccountRow } from "@/db/schema";
 import { toFieldErrors } from "../validation";
-import { accountInputSchema } from "./validation";
+import { accountInputSchema, transactionIdSchema } from "./validation";
 
 /**
  * Server-side data access for user-owned financial accounts.
@@ -16,7 +16,15 @@ import { accountInputSchema } from "./validation";
  * Deletion semantics: deletion is deliberately guarded. The `transactions`
  * foreign key would cascade and silently wipe an account's transaction history,
  * so `deleteAccount` refuses to delete any account that still has transactions.
- * Only empty accounts are removed. Categories are never affected.
+ * Only empty accounts are removed. Categories are never affected. Archiving is
+ * the recommended alternative for an account with history: it only flips a
+ * flag, never touches rows or balances, and is reversible.
+ *
+ * Archiving semantics: `archived` is a display/eligibility flag, not a
+ * financial state. An archived account keeps its opening balance and every
+ * transaction that references it; dashboard balances, reports and the CSV
+ * export continue to include it. It merely stops being offered for *new*
+ * transactions (enforced in the transaction DAL, not just the UI).
  */
 
 export type CreateAccountResult =
@@ -109,4 +117,42 @@ export async function deleteAccount(
 
   await getDb().delete(accounts).where(eq(accounts.id, accountId));
   return { ok: true };
+}
+
+export type SetAccountArchivedResult =
+  | { ok: true; account: AccountRow }
+  | { ok: false; reason: "not_found" };
+
+/**
+ * Archives or unarchives an account owned by `userId`. Safety layers, in order:
+ * 1. A malformed id is reported as "not found" so callers cannot distinguish it
+ *    from a real-but-foreign id.
+ * 2. The write is scoped by `id = ? AND user_id = ?` in a single statement, so
+ *    no foreign row can ever be mutated and a zero-row update is reported as
+ *    `not_found`.
+ *
+ * Archiving is deliberately minimal: it flips the `archived` flag (and bumps
+ * `updatedAt`) and touches nothing else. Transactions, opening balances and
+ * every aggregate stay exactly as they were, so historical financial data is
+ * never rewritten and the operation is fully reversible.
+ */
+export async function setAccountArchived(
+  userId: string,
+  accountId: string,
+  archived: boolean,
+): Promise<SetAccountArchivedResult> {
+  if (!transactionIdSchema.safeParse(accountId).success) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  const [account] = await getDb()
+    .update(accounts)
+    .set({ archived, updatedAt: new Date() })
+    .where(and(eq(accounts.id, accountId), eq(accounts.userId, userId)))
+    .returning();
+
+  if (!account) {
+    return { ok: false, reason: "not_found" };
+  }
+  return { ok: true, account };
 }

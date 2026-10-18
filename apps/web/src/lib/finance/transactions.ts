@@ -29,6 +29,15 @@ import type { TransactionType } from "./types";
  * additionally match the transaction `type` (income/expense), so a category can
  * never be borrowed across directions.
  *
+ * Archived-account policy: an archived account is never eligible for a *new*
+ * transaction, and that is enforced here — not only by hiding it in the UI —
+ * so a forged or stale `accountId` is rejected with a field error. The one
+ * exception is an edit that keeps a transaction on its own (already archived)
+ * account: historical rows stay editable without being forced onto a different
+ * account, but they cannot be moved *onto* another archived account. Nothing
+ * here ever archives, deletes or rewrites an account; transactions of archived
+ * accounts remain fully visible in history, dashboards, reports and exports.
+ *
  * Amounts are integer Toman, always positive; `type` carries the direction.
  *
  * Reads are equally strictly scoped: `listTransactions` and
@@ -36,7 +45,8 @@ import type { TransactionType } from "./types";
  * filters can only narrow the owner's own rows.
  *
  * Deleting an account cascades to its transactions (see the FK), so a
- * transaction can never outlive its account.
+ * transaction can never outlive its account. Archiving is the safe, reversible
+ * alternative and leaves every row untouched.
  */
 
 export type CreateTransactionResult =
@@ -44,6 +54,8 @@ export type CreateTransactionResult =
   | { ok: false; fieldErrors: Record<string, string> };
 
 const ACCOUNT_NOT_FOUND = "حساب موردنظر یافت نشد.";
+const ACCOUNT_ARCHIVED =
+  "حساب بایگانی‌شده قابل انتخاب نیست؛ ابتدا آن را از بایگانی خارج کنید.";
 const CATEGORY_NOT_FOUND = "دسته‌بندی موردنظر یافت نشد.";
 const CATEGORY_TYPE_MISMATCH =
   "دسته‌بندی انتخاب‌شده با نوع تراکنش هم‌خوانی ندارد.";
@@ -52,22 +64,39 @@ type ReferenceResolution =
   | { ok: true }
   | { ok: false; fieldErrors: Record<string, string> };
 
+interface ReferenceOptions {
+  /**
+   * An archived account id that may still be referenced (the account a
+   * transaction is already on). Everything else archived is rejected.
+   */
+  allowArchivedAccountId?: string;
+}
+
 /**
  * Shared cross-record guard for create and update: verifies that the referenced
  * account — and, when present, the referenced category — belong to `userId`, and
  * that the category's `kind` matches the transaction `type`. A category is bound
  * to a direction ("income" or "expense"), so borrowing one across directions is
  * rejected even though ownership is valid.
+ *
+ * An archived account is rejected unless it is the transaction's current
+ * account (`allowArchivedAccountId`), so archived accounts can never be chosen
+ * for new rows while existing rows stay editable in place.
  */
 async function resolveReferences(
   userId: string,
   accountId: string,
   categoryId: string | null,
   type: TransactionType,
+  options: ReferenceOptions = {},
 ): Promise<ReferenceResolution> {
   const account = await findAccountForUser(accountId, userId);
   if (!account) {
     return { ok: false, fieldErrors: { accountId: ACCOUNT_NOT_FOUND } };
+  }
+
+  if (account.archived && accountId !== options.allowArchivedAccountId) {
+    return { ok: false, fieldErrors: { accountId: ACCOUNT_ARCHIVED } };
   }
 
   if (categoryId !== null) {
@@ -164,6 +193,9 @@ export async function updateTransaction(
     parsed.data.accountId,
     parsed.data.categoryId,
     parsed.data.type,
+    // Keeping the transaction on its own (possibly archived) account is fine;
+    // moving it onto any *other* archived account is not.
+    { allowArchivedAccountId: existing.accountId },
   );
   if (!references.ok) {
     return { ok: false, reason: "invalid", fieldErrors: references.fieldErrors };
@@ -204,6 +236,8 @@ export interface TransactionHistoryItem {
   note: string;
   accountId: string;
   accountName: string;
+  /** True when the owning account has been archived (still fully visible). */
+  accountArchived: boolean;
   categoryName: string | null;
 }
 
@@ -247,6 +281,7 @@ async function selectHistoryRows(
     note: string;
     accountId: string;
     accountName: string;
+    accountArchived: boolean;
     categoryName: string | null;
   }[]
 > {
@@ -259,6 +294,7 @@ async function selectHistoryRows(
       note: transactions.note,
       accountId: transactions.accountId,
       accountName: accounts.name,
+      accountArchived: accounts.archived,
       categoryName: categories.name,
     })
     .from(transactions)
@@ -281,6 +317,7 @@ function toHistoryItem(row: {
   note: string;
   accountId: string;
   accountName: string;
+  accountArchived: boolean;
   categoryName: string | null;
 }): TransactionHistoryItem {
   return {
@@ -291,13 +328,15 @@ function toHistoryItem(row: {
     note: row.note,
     accountId: row.accountId,
     accountName: row.accountName,
+    accountArchived: row.accountArchived,
     categoryName: row.categoryName,
   };
 }
 
 /**
  * A page of the owner's transaction history, newest first, joined to the owning
- * account name and the optional category name.
+ * account name (and its archived flag) and the optional category name. Rows of
+ * archived accounts are never hidden — archiving only marks them.
  *
  * The owner predicate (`transactions.userId = userId`) is ALWAYS the first
  * condition, so filters can only *narrow* the result set — a filter pointing at

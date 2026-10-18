@@ -2,6 +2,7 @@
  * @vitest-environment node
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 import type { AccountRow } from "@/db/schema";
 
 const h = vi.hoisted(() => ({
@@ -29,6 +30,7 @@ import {
   deleteAccount,
   findAccountForUser,
   listAccounts,
+  setAccountArchived,
 } from "@/lib/finance/accounts";
 
 const OWNER = "11111111-1111-4111-8111-111111111111";
@@ -187,5 +189,54 @@ describe("deleteAccount", () => {
       transactionCount: 3,
     });
     expect(h.state.deleteCalls).toBe(0);
+  });
+});
+
+describe("setAccountArchived", () => {
+  it("archives an owned account with a single owner-scoped update", async () => {
+    h.state.updateResult = [accountRow({ archived: true })];
+
+    const result = await setAccountArchived(OWNER, ACCOUNT_ID, true);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.account.archived).toBe(true);
+    expect(h.state.updateCalls).toBe(1);
+    expect(h.state.updatedValues[0]).toMatchObject({ archived: true });
+
+    const { sql, params } = new PgDialect().sqlToQuery(
+      h.state.whereConditions[h.state.whereConditions.length - 1] as never,
+    );
+    expect(sql).toContain("id");
+    expect(sql).toContain("user_id");
+    expect(params).toContain(OWNER);
+    expect(params).toContain(ACCOUNT_ID);
+  });
+
+  it("unarchives an owned account", async () => {
+    h.state.updateResult = [accountRow({ archived: false })];
+
+    const result = await setAccountArchived(OWNER, ACCOUNT_ID, false);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.account.archived).toBe(false);
+    expect(h.state.updatedValues[0]).toMatchObject({ archived: false });
+  });
+
+  it("never flips another user's account and reports not_found", async () => {
+    // The owner-scoped WHERE matches nothing for a foreign row.
+    h.state.updateResult = [];
+
+    await expect(setAccountArchived(OWNER, ACCOUNT_ID, true)).resolves.toEqual({
+      ok: false,
+      reason: "not_found",
+    });
+    expect(h.state.updateCalls).toBe(1);
+  });
+
+  it("rejects a malformed id before touching the database", async () => {
+    await expect(
+      setAccountArchived(OWNER, "not-a-uuid", true),
+    ).resolves.toEqual({ ok: false, reason: "not_found" });
+    expect(h.state.updateCalls).toBe(0);
   });
 });

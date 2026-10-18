@@ -647,3 +647,82 @@ describe("listTransactionHistoryForExport", () => {
     ).resolves.toEqual([]);
   });
 });
+
+describe("archived-account policy", () => {
+  const SECOND_ACCOUNT_ID = "77777777-7777-4777-8777-777777777777";
+  const archivedAccount = { id: ACCOUNT_ID, userId: OWNER, archived: true };
+  const activeAccount = { id: ACCOUNT_ID, userId: OWNER, archived: false };
+  const archivedSecond = { id: SECOND_ACCOUNT_ID, userId: OWNER, archived: true };
+  const activeSecond = { id: SECOND_ACCOUNT_ID, userId: OWNER, archived: false };
+
+  it("refuses to create a transaction on an archived account", async () => {
+    h.state.selectQueue = [[archivedAccount]];
+
+    const result = await createTransaction(OWNER, baseInput);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.fieldErrors.accountId).toContain("بایگانی");
+    expect(h.state.insertCalls).toBe(0);
+  });
+
+  it("creates a transaction on an active account", async () => {
+    h.state.selectQueue = [[activeAccount]];
+    h.state.insertResult = [transactionRow()];
+
+    const result = await createTransaction(OWNER, baseInput);
+
+    expect(result.ok).toBe(true);
+    expect(h.state.insertCalls).toBe(1);
+  });
+
+  it("keeps an existing transaction on its own archived account when editing", async () => {
+    h.state.selectQueue = [
+      [transactionRow({ accountId: ACCOUNT_ID })],
+      [archivedAccount],
+    ];
+    h.state.updateResult = [transactionRow({ accountId: ACCOUNT_ID })];
+
+    const result = await updateTransaction(OWNER, transactionRow().id, {
+      ...baseInput,
+      accountId: ACCOUNT_ID,
+      amount: 99000,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(h.state.updateCalls).toBe(1);
+  });
+
+  it("refuses to move a transaction onto a different archived account", async () => {
+    h.state.selectQueue = [
+      [transactionRow({ accountId: ACCOUNT_ID })],
+      [archivedSecond],
+    ];
+
+    const result = await updateTransaction(OWNER, transactionRow().id, {
+      ...baseInput,
+      accountId: SECOND_ACCOUNT_ID,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok && result.reason === "invalid") {
+      expect(result.fieldErrors.accountId).toContain("بایگانی");
+    }
+    expect(h.state.updateCalls).toBe(0);
+  });
+
+  it("allows moving a transaction from an archived account to an active one", async () => {
+    h.state.selectQueue = [
+      [transactionRow({ accountId: ACCOUNT_ID })],
+      [activeSecond],
+    ];
+    h.state.updateResult = [transactionRow({ accountId: SECOND_ACCOUNT_ID })];
+
+    const result = await updateTransaction(OWNER, transactionRow().id, {
+      ...baseInput,
+      accountId: SECOND_ACCOUNT_ID,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(h.state.updateCalls).toBe(1);
+  });
+});

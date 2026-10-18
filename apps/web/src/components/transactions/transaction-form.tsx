@@ -21,6 +21,8 @@ import { TextField } from "@/components/ui/text-field";
 export interface AccountOption {
   id: string;
   name: string;
+  /** True when the account is archived (still selectable only where allowed). */
+  archived?: boolean;
 }
 
 /** Minimal category option exposed to the client (no owner id or timestamps). */

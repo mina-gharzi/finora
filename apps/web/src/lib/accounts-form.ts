@@ -20,3 +20,14 @@ export interface DeleteAccountState {
 }
 
 export const EMPTY_DELETE_ACCOUNT_STATE: DeleteAccountState = { status: "idle" };
+
+export interface ArchiveAccountState {
+  /** Form submission status. */
+  status: "idle" | "success" | "error";
+  /** General message shown to the user. */
+  message?: string;
+}
+
+export const EMPTY_ARCHIVE_ACCOUNT_STATE: ArchiveAccountState = {
+  status: "idle",
+};

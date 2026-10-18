@@ -144,7 +144,9 @@ export function TransactionHistoryView({
                 <option value="">همه حساب‌ها</option>
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>
-                    {account.name}
+                    {account.archived
+                      ? `${account.name} (بایگانی‌شده)`
+                      : account.name}
                   </option>
                 ))}
               </Select>
@@ -264,7 +266,12 @@ export function TransactionHistoryView({
                       {formatJalaliFromIso(item.occurredOn)}
                     </td>
                     <td className="px-5 py-3 text-muted-foreground">
-                      {item.accountName}
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        {item.accountName}
+                        {item.accountArchived && (
+                          <Badge variant="warning">بایگانی‌شده</Badge>
+                        )}
+                      </span>
                     </td>
                     <td className="px-5 py-3 text-muted-foreground">
                       {item.categoryName ?? NO_CATEGORY_LABEL}

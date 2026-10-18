@@ -58,7 +58,12 @@ afterEach(() => {
 describe("TransactionsView", () => {
   it("prompts the user to create an account when none exist", () => {
     render(
-      <TransactionsView accounts={[]} categories={[]} defaultDate="2026-10-18" />,
+      <TransactionsView
+        accounts={[]}
+        hasAnyAccounts={false}
+        categories={[]}
+        defaultDate="2026-10-18"
+      />,
     );
 
     expect(
@@ -70,10 +75,30 @@ describe("TransactionsView", () => {
     expect(screen.queryByRole("button", { name: "ثبت تراکنش" })).toBeNull();
   });
 
+  it("explains that all accounts are archived when none are active", () => {
+    render(
+      <TransactionsView
+        accounts={[]}
+        hasAnyAccounts
+        categories={[]}
+        defaultDate="2026-10-18"
+      />,
+    );
+
+    expect(
+      screen.getByText("همه حساب‌های شما بایگانی شده‌اند"),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "مدیریت حساب‌ها" }).getAttribute("href"),
+    ).toBe("/accounts");
+    expect(screen.queryByRole("button", { name: "ثبت تراکنش" })).toBeNull();
+  });
+
   it("renders the creation form when the user has accounts", () => {
     render(
       <TransactionsView
         accounts={ACCOUNTS}
+        hasAnyAccounts
         categories={CATEGORIES}
         defaultDate="2026-10-18"
       />,
@@ -100,6 +125,7 @@ describe("TransactionsView", () => {
     render(
       <TransactionsView
         accounts={ACCOUNTS}
+        hasAnyAccounts
         categories={CATEGORIES}
         defaultDate="2026-10-18"
       />,
@@ -121,6 +147,7 @@ describe("TransactionsView", () => {
     render(
       <TransactionsView
         accounts={ACCOUNTS}
+        hasAnyAccounts
         categories={CATEGORIES}
         defaultDate="2026-10-18"
       />,
@@ -149,6 +176,7 @@ describe("TransactionsView", () => {
     render(
       <TransactionsView
         accounts={ACCOUNTS}
+        hasAnyAccounts
         categories={CATEGORIES}
         defaultDate="2026-10-18"
       />,
@@ -164,6 +192,7 @@ describe("TransactionsView", () => {
     render(
       <TransactionsView
         accounts={ACCOUNTS}
+        hasAnyAccounts
         categories={CATEGORIES}
         defaultDate="2026-10-18"
       />,
@@ -178,6 +207,7 @@ describe("TransactionsView", () => {
     render(
       <TransactionsView
         accounts={ACCOUNTS}
+        hasAnyAccounts
         categories={CATEGORIES}
         defaultDate="2026-10-18"
       />,

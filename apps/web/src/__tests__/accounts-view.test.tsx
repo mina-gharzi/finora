@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/app/actions/accounts", () => ({
   createAccountAction: vi.fn(),
   deleteAccountAction: vi.fn(),
+  setAccountArchivedAction: vi.fn(),
 }));
 
 vi.mock("@finora/shared", () => ({
@@ -33,6 +34,7 @@ vi.mock("react", async () => {
 });
 
 import { AccountsView } from "@/components/accounts/accounts-view";
+import { ArchiveAccountButton } from "@/components/accounts/archive-account-button";
 import { DeleteAccountButton } from "@/components/accounts/delete-account-button";
 import type { AccountRow } from "@/db/schema";
 
@@ -60,7 +62,7 @@ afterEach(() => {
 
 describe("AccountsView", () => {
   it("renders an empty state when no accounts exist", () => {
-    render(<AccountsView accounts={[]} />);
+    render(<AccountsView accounts={[]} balanceById={{}} />);
 
     expect(
       screen.getByRole("heading", { level: 1, name: "حساب‌ها" }),
@@ -73,20 +75,54 @@ describe("AccountsView", () => {
     ).toBeTruthy();
   });
 
-  it("renders a list of accounts with type badges and formatted balances", () => {
+  it("renders accounts with type badges, current and opening balances", () => {
     const accounts: AccountRow[] = [
       accountRow({ id: "a1", name: "کیف پول نقدی", type: "cash", openingBalance: 150000 }),
       accountRow({ id: "a2", name: "بانک ملی", type: "bank", openingBalance: 0 }),
     ];
 
-    render(<AccountsView accounts={accounts} />);
+    render(
+      <AccountsView accounts={accounts} balanceById={{ a1: 200000, a2: 0 }} />,
+    );
 
     expect(screen.getByText("کیف پول نقدی")).toBeTruthy();
     expect(screen.getByText("بانک ملی")).toBeTruthy();
     expect(screen.getAllByText("نقدی").length).toBeGreaterThan(0);
     expect(screen.getAllByText("بانکی").length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/150,000 تومان/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/0 تومان/).length).toBeGreaterThan(0);
+    // Current balance uses the computed map, opening balance the row value.
+    expect(screen.getByText(/موجودی فعلی: 200,000 تومان/)).toBeTruthy();
+    expect(screen.getByText(/موجودی اولیه: 150,000 تومان/)).toBeTruthy();
+  });
+
+  it("badges archived accounts and lists the active ones first", () => {
+    const accounts: AccountRow[] = [
+      accountRow({ id: "old", name: "حساب بایگانی", archived: true, createdAt: new Date(2020, 0, 1) }),
+      accountRow({ id: "new", name: "حساب فعال", archived: false, createdAt: new Date(2024, 0, 1) }),
+    ];
+
+    render(<AccountsView accounts={accounts} balanceById={{}} />);
+
+    expect(screen.getAllByText("بایگانی‌شده")).toHaveLength(1);
+
+    const names = screen
+      .getAllByText(/حساب (فعال|بایگانی)/)
+      .map((node) => node.textContent);
+    expect(names[0]).toBe("حساب فعال");
+  });
+
+  it("offers archive and delete controls for every account", () => {
+    const accounts: AccountRow[] = [
+      accountRow({ id: "a1", name: "کیف پول نقدی" }),
+    ];
+
+    render(<AccountsView accounts={accounts} balanceById={{}} />);
+
+    expect(
+      screen.getByRole("button", { name: "بایگانی حساب کیف پول نقدی" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "حذف حساب کیف پول نقدی" }),
+    ).toBeTruthy();
   });
 });
 
@@ -123,5 +159,65 @@ describe("DeleteAccountButton", () => {
     expect(
       screen.getByRole("button", { name: "حذف حساب کیف پول نقدی" }),
     ).toBeTruthy();
+  });
+});
+
+describe("ArchiveAccountButton", () => {
+  it("requires confirmation and sends archived=true for an active account", () => {
+    const { container } = render(
+      <ArchiveAccountButton accountId="acc-1" accountName="کیف پول نقدی" archived={false} />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "تأیید بایگانی" }),
+    ).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "بایگانی حساب کیف پول نقدی" }),
+    );
+
+    expect(screen.getByRole("button", { name: "تأیید بایگانی" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "انصراف" })).toBeTruthy();
+
+    const id = container.querySelector<HTMLInputElement>('input[name="accountId"]');
+    const archived = container.querySelector<HTMLInputElement>(
+      'input[name="archived"]',
+    );
+    expect(id?.value).toBe("acc-1");
+    expect(archived?.value).toBe("true");
+  });
+
+  it("lets the user back out of the archive confirmation", () => {
+    render(
+      <ArchiveAccountButton accountId="acc-1" accountName="کیف پول نقدی" archived={false} />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "بایگانی حساب کیف پول نقدی" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "انصراف" }));
+
+    expect(screen.queryByRole("button", { name: "تأیید بایگانی" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "بایگانی حساب کیف پول نقدی" }),
+    ).toBeTruthy();
+  });
+
+  it("unarchives in one step with archived=false and no confirmation", () => {
+    const { container } = render(
+      <ArchiveAccountButton accountId="acc-1" accountName="کیف پول نقدی" archived />,
+    );
+
+    expect(screen.queryByRole("button", { name: "انصراف" })).toBeNull();
+
+    const button = screen.getByRole("button", {
+      name: "خروج از بایگانی حساب کیف پول نقدی",
+    });
+    expect(button).toBeTruthy();
+
+    const archived = container.querySelector<HTMLInputElement>(
+      'input[name="archived"]',
+    );
+    expect(archived?.value).toBe("false");
   });
 });

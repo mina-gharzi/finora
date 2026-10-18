@@ -17,10 +17,15 @@ function todayIsoDate(): string {
 
 async function AuthenticatedTransactionForm() {
   const userId = await requireUserId();
-  const [accounts, categories] = await Promise.all([
+  const [allAccounts, categories] = await Promise.all([
     listAccounts(userId),
     listCategories(userId),
   ]);
+
+  // Archived accounts are never offered for new transactions (the server
+  // rejects them too); the unfiltered list is only used to tell "no accounts
+  // at all" apart from "all accounts archived".
+  const accounts = allAccounts.filter((account) => !account.archived);
 
   return (
     <TransactionsView
@@ -28,6 +33,7 @@ async function AuthenticatedTransactionForm() {
         id: account.id,
         name: account.name,
       }))}
+      hasAnyAccounts={allAccounts.length > 0}
       categories={categories.map((category) => ({
         id: category.id,
         name: category.name,

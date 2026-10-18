@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   requireUserIdCalls: 0,
   createAccountCalls: [] as Array<{ userId: string; input: unknown }>,
   deleteAccountCalls: [] as Array<{ userId: string; input: unknown }>,
+  archiveCalls: [] as Array<{ userId: string; id: string; archived: boolean }>,
 }));
 
 vi.mock("@/lib/dal", () => ({
@@ -25,6 +26,12 @@ vi.mock("@/lib/finance/accounts", () => ({
     h.deleteAccountCalls.push({ userId, input });
     return { ok: true };
   }),
+  setAccountArchived: vi.fn(
+    async (userId: string, id: string, archived: boolean) => {
+      h.archiveCalls.push({ userId, id, archived });
+      return { ok: true, account: { id } };
+    },
+  ),
 }));
 
 vi.mock("next/cache", () => ({
@@ -35,8 +42,13 @@ vi.mock("next/cache", () => ({
 import {
   createAccountAction,
   deleteAccountAction,
+  setAccountArchivedAction,
 } from "@/app/actions/accounts";
-import { EMPTY_ACCOUNT_FORM_STATE, EMPTY_DELETE_ACCOUNT_STATE } from "@/lib/accounts-form";
+import {
+  EMPTY_ACCOUNT_FORM_STATE,
+  EMPTY_ARCHIVE_ACCOUNT_STATE,
+  EMPTY_DELETE_ACCOUNT_STATE,
+} from "@/lib/accounts-form";
 import * as accountsDal from "@/lib/finance/accounts";
 import * as dal from "@/lib/dal";
 import { revalidatePath } from "next/cache";
@@ -45,6 +57,7 @@ beforeEach(() => {
   h.requireUserIdCalls = 0;
   h.createAccountCalls = [];
   h.deleteAccountCalls = [];
+  h.archiveCalls = [];
   vi.clearAllMocks();
 });
 
@@ -132,5 +145,79 @@ describe("deleteAccountAction", () => {
     const res = await deleteAccountAction(EMPTY_DELETE_ACCOUNT_STATE, fd);
     expect(res.status).toBe("error");
     expect(res.message).toBeDefined();
+  });
+});
+
+describe("setAccountArchivedAction", () => {
+  it("archives using the session owner and revalidates the affected routes", async () => {
+    const fd = new FormData();
+    fd.set("accountId", "acc-1");
+    fd.set("archived", "true");
+
+    const res = await setAccountArchivedAction(EMPTY_ARCHIVE_ACCOUNT_STATE, fd);
+
+    expect(res.status).toBe("success");
+    expect(h.requireUserIdCalls).toBeGreaterThan(0);
+    expect(h.archiveCalls).toEqual([
+      { userId: "user-1", id: "acc-1", archived: true },
+    ]);
+    expect(revalidatePath).toHaveBeenCalledWith("/accounts");
+    expect(revalidatePath).toHaveBeenCalledWith("/transactions/new");
+  });
+
+  it("unarchives when the archived field is not 'true'", async () => {
+    const fd = new FormData();
+    fd.set("accountId", "acc-1");
+    fd.set("archived", "false");
+
+    const res = await setAccountArchivedAction(EMPTY_ARCHIVE_ACCOUNT_STATE, fd);
+
+    expect(res.status).toBe("success");
+    expect(h.archiveCalls[0]).toEqual({
+      userId: "user-1",
+      id: "acc-1",
+      archived: false,
+    });
+  });
+
+  it("rejects an empty account id without calling the DAL", async () => {
+    const fd = new FormData();
+    fd.set("accountId", "");
+    fd.set("archived", "true");
+
+    const res = await setAccountArchivedAction(EMPTY_ARCHIVE_ACCOUNT_STATE, fd);
+
+    expect(res.status).toBe("error");
+    expect(accountsDal.setAccountArchived).not.toHaveBeenCalled();
+  });
+
+  it("collapses a foreign or missing account into a generic error", async () => {
+    vi.mocked(accountsDal.setAccountArchived).mockResolvedValueOnce({
+      ok: false,
+      reason: "not_found",
+    } as never);
+
+    const fd = new FormData();
+    fd.set("accountId", "acc-1");
+    fd.set("archived", "true");
+
+    const res = await setAccountArchivedAction(EMPTY_ARCHIVE_ACCOUNT_STATE, fd);
+
+    expect(res.status).toBe("error");
+    expect(res.message).toBe("حساب موردنظر یافت نشد.");
+  });
+
+  it("propagates the unauthenticated redirect", async () => {
+    vi.mocked(dal.requireUserId).mockImplementationOnce(async () => {
+      throw new Error("REDIRECT");
+    });
+
+    const fd = new FormData();
+    fd.set("accountId", "acc-1");
+    fd.set("archived", "true");
+
+    await expect(
+      setAccountArchivedAction(EMPTY_ARCHIVE_ACCOUNT_STATE, fd),
+    ).rejects.toThrow();
   });
 });

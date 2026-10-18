@@ -49,6 +49,8 @@ export interface AccountBalance {
   id: string;
   name: string;
   type: AccountType;
+  /** True when the account is archived (still shown; money is still there). */
+  archived: boolean;
   /** opening_balance + income - expense across the account's full history. */
   balance: number;
 }
@@ -145,9 +147,11 @@ export async function getCategoryExpenseBreakdown(
 
 /**
  * Current balance of every account owned by `userId`, over full history
- * (`opening_balance + income - expense`). A left join keeps accounts that have
- * no transactions; grouping by the account guarantees its rows are not
- * multiplied by the join.
+ * (`opening_balance + income - expense`). ARCHIVED accounts are intentionally
+ * included: archiving is a lifecycle flag, not a financial event, so their
+ * stored money and transactions must keep counting. A left join keeps accounts
+ * that have no transactions; grouping by the account guarantees its rows are
+ * not multiplied by the join.
  */
 export async function getAccountBalances(
   userId: string,
@@ -157,6 +161,7 @@ export async function getAccountBalances(
       id: accounts.id,
       name: accounts.name,
       type: accounts.type,
+      archived: accounts.archived,
       openingBalance: accounts.openingBalance,
       income: sql<string | null>`coalesce(sum(case when ${transactions.type} = 'income' then ${transactions.amount} else 0 end), 0)`,
       expense: sql<string | null>`coalesce(sum(case when ${transactions.type} = 'expense' then ${transactions.amount} else 0 end), 0)`,
@@ -168,6 +173,7 @@ export async function getAccountBalances(
       accounts.id,
       accounts.name,
       accounts.type,
+      accounts.archived,
       accounts.openingBalance,
       accounts.createdAt,
     )
@@ -180,6 +186,7 @@ export async function getAccountBalances(
       id: row.id,
       name: row.name,
       type: row.type as AccountType,
+      archived: row.archived,
       balance: toTomanFromAggregate(row.openingBalance) + income - expense,
     };
   });
