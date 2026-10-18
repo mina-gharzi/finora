@@ -44,6 +44,15 @@ export function WalletIcon(props: IconProps) {
   );
 }
 
+export function CategoryIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7.2-7.2a2 2 0 0 1-.6-1.4V4a1 1 0 0 1 1-1h8a2 2 0 0 1 1.4.6l7.2 7.2a2 2 0 0 1 0 2.6Z" />
+      <path d="M7.5 7.5h.01" />
+    </svg>
+  );
+}
+
 export function BudgetIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

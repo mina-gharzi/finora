@@ -1,16 +1,29 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { categories, type CategoryRow } from "@/db/schema";
+import { categories, transactions, type CategoryRow } from "@/db/schema";
 import { toFieldErrors } from "../validation";
-import { categoryInputSchema } from "./validation";
+import {
+  categoryInputSchema,
+  categoryNameInputSchema,
+  transactionIdSchema,
+} from "./validation";
 
 /**
  * Server-side data access for user-owned transaction categories. The owner id
  * always comes from the verified server session and scopes every query.
  *
- * Deleting a category never deletes history: transactions keep their row and
- * have `category_id` set to NULL by the `ON DELETE set null` foreign key.
+ * Deletion semantics: unlike the database's `ON DELETE set null` foreign key —
+ * which would quietly strip the category from historical transactions — deletion
+ * is deliberately guarded. A category that is still referenced by any
+ * transaction is never removed, so financial history is preserved and never
+ * silently rewritten. Only unreferenced categories can be deleted, and the
+ * guard is enforced in the delete statement itself so a concurrent transaction
+ * insert cannot slip a reference in between a check and the delete.
+ *
+ * The category `kind` ("income"/"expense") is immutable after creation: it is
+ * tied to the direction of the transactions that use it, so renaming only ever
+ * changes the display name.
  */
 
 export type CreateCategoryResult =
@@ -64,16 +77,116 @@ export async function findCategoryForUser(
   return row;
 }
 
-/** Deletes a category owned by `userId`. Returns false for foreign/missing ids. */
+/** Number of transactions referencing `categoryId`. */
+export async function countTransactionsForCategory(
+  categoryId: string,
+): Promise<number> {
+  const [row] = await getDb()
+    .select({ value: count() })
+    .from(transactions)
+    .where(eq(transactions.categoryId, categoryId));
+
+  return row?.value ?? 0;
+}
+
+export type RenameCategoryResult =
+  | { ok: true; category: CategoryRow }
+  | { ok: false; reason: "not_found" }
+  | { ok: false; reason: "invalid"; fieldErrors: Record<string, string> };
+
+/**
+ * Renames a category owned by `userId`. Safety layers, in order:
+ * 1. A malformed id is reported as "not found" so callers cannot distinguish it
+ *    from a real-but-foreign id.
+ * 2. The new name is validated (`invalid` on failure, before any read/write).
+ * 3. The id is loaded through `findCategoryForUser`, collapsing "missing" and
+ *    "someone else's" into the same `not_found`.
+ * 4. The write is additionally scoped by `id = ? AND user_id = ?`, so no foreign
+ *    row can ever be mutated even if ownership changed between the read and the
+ *    write; a zero-row update is reported as `not_found`.
+ *
+ * Ownership is never read from input and `kind` is left untouched.
+ */
+export async function renameCategory(
+  userId: string,
+  categoryId: string,
+  input: unknown,
+): Promise<RenameCategoryResult> {
+  if (!transactionIdSchema.safeParse(categoryId).success) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  const parsed = categoryNameInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      reason: "invalid",
+      fieldErrors: toFieldErrors(parsed.error),
+    };
+  }
+
+  const existing = await findCategoryForUser(categoryId, userId);
+  if (!existing) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  const [category] = await getDb()
+    .update(categories)
+    .set({ name: parsed.data.name, updatedAt: new Date() })
+    .where(and(eq(categories.id, categoryId), eq(categories.userId, userId)))
+    .returning();
+
+  if (!category) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  return { ok: true, category };
+}
+
+export type DeleteCategoryResult =
+  | { ok: true }
+  | { ok: false; reason: "not_found" }
+  | { ok: false; reason: "has_transactions"; transactionCount: number };
+
+/**
+ * Deletes a category owned by `userId`, but only when no transaction references
+ * it. Returns a rich result so callers can present an appropriate message.
+ *
+ * The reference check is part of the delete statement itself: the row is removed
+ * by `id = ? AND user_id = ? AND NOT EXISTS (referencing transaction)`, so the
+ * deletion is atomic and a transaction that references the category can never be
+ * orphaned by a race between a separate count and the delete. When nothing is
+ * removed the row is re-read to report either `not_found` (missing/foreign/
+ * malformed) or `has_transactions`.
+ */
 export async function deleteCategory(
   userId: string,
   categoryId: string,
-): Promise<boolean> {
-  const category = await findCategoryForUser(categoryId, userId);
-  if (!category) {
-    return false;
+): Promise<DeleteCategoryResult> {
+  if (!transactionIdSchema.safeParse(categoryId).success) {
+    return { ok: false, reason: "not_found" };
   }
 
-  await getDb().delete(categories).where(eq(categories.id, categoryId));
-  return true;
+  const deleted = await getDb()
+    .delete(categories)
+    .where(
+      and(
+        eq(categories.id, categoryId),
+        eq(categories.userId, userId),
+        sql`not exists (select 1 from ${transactions} where ${transactions.categoryId} = ${categories.id})`,
+      ),
+    )
+    .returning();
+
+  if (deleted.length > 0) {
+    return { ok: true };
+  }
+
+  const existing = await findCategoryForUser(categoryId, userId);
+  if (!existing) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  const transactionCount = await countTransactionsForCategory(categoryId);
+  return { ok: false, reason: "has_transactions", transactionCount };
 }

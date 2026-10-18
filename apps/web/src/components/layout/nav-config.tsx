@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import {
   BudgetIcon,
+  CategoryIcon,
   DashboardIcon,
   ReportsIcon,
   SettingsIcon,
@@ -17,11 +18,12 @@ export interface NavEntry {
 }
 
 /**
- * Placeholder navigation for the application shell.
+ * Navigation for the application shell.
  *
- * Only "داشبورد" (dashboard) is a real destination. Every other entry is an
- * intentionally disabled placeholder so the shell is demonstrated without
- * implying that those financial features already exist.
+ * Dashboard, transactions, accounts and categories are real destinations.
+ * Budgets, reports and settings are intentionally disabled placeholders so the
+ * shell is demonstrated without implying that those financial features already
+ * exist.
  */
 export const navGroups: { title: string; items: NavEntry[] }[] = [
   {
@@ -49,6 +51,12 @@ export const navGroups: { title: string; items: NavEntry[] }[] = [
         label: "حساب‌ها",
         href: "/accounts",
         icon: <WalletIcon />,
+      },
+      {
+        key: "categories",
+        label: "دسته‌بندی‌ها",
+        href: "/categories",
+        icon: <CategoryIcon />,
       },
       { key: "budgets", label: "بودجه‌ها", icon: <BudgetIcon />, disabled: true },
       { key: "reports", label: "گزارش‌ها", icon: <ReportsIcon />, disabled: true },

@@ -69,6 +69,15 @@ export const categoryInputSchema = z.object({
   kind: z.enum(TRANSACTION_TYPES, { error: "نوع دسته‌بندی معتبر نیست." }),
 });
 
+/**
+ * Renaming an existing category. Only the name may change: `kind` is immutable
+ * once created because a category is bound to the direction of the transactions
+ * that reference it, and rewriting it would desynchronise historical rows.
+ */
+export const categoryNameInputSchema = z.object({
+  name: nameSchema,
+});
+
 export const transactionInputSchema = z.object({
   accountId: idSchema,
   categoryId: idSchema.nullable(),

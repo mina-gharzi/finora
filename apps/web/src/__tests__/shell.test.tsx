@@ -59,7 +59,7 @@ describe("AppShell", () => {
     expect(aside).not.toBeNull();
     if (!aside) return;
 
-    expect(aside.querySelectorAll("a")).toHaveLength(3);
+    expect(aside.querySelectorAll("a")).toHaveLength(4);
 
     const current = screen.getByRole("link", { name: "داشبورد" });
     expect(current.getAttribute("aria-current")).toBe("page");
@@ -71,10 +71,13 @@ describe("AppShell", () => {
     const accounts = screen.getByRole("link", { name: "حساب‌ها" });
     expect(accounts.getAttribute("href")).toBe("/accounts");
 
+    const categories = screen.getByRole("link", { name: "دسته‌بندی‌ها" });
+    expect(categories.getAttribute("href")).toBe("/categories");
+
     expect(
       aside.querySelectorAll('[aria-disabled="true"]'),
     ).toHaveLength(3);
-    expect(aside.querySelectorAll("li")).toHaveLength(6);
+    expect(aside.querySelectorAll("li")).toHaveLength(7);
     expect(aside.textContent).toContain("به‌زودی");
   });
 

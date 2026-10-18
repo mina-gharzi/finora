@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   accountInputSchema,
   categoryInputSchema,
+  categoryNameInputSchema,
   isoDateSchema,
   transactionInputSchema,
 } from "../validation";
@@ -93,5 +94,35 @@ describe("categoryInputSchema", () => {
   it("validates kind", () => {
     expect(categoryInputSchema.safeParse({ name: "غذا", kind: "expense" }).success).toBe(true);
     expect(categoryInputSchema.safeParse({ name: "غذا", kind: "other" }).success).toBe(false);
+  });
+});
+
+describe("categoryNameInputSchema", () => {
+  it("accepts a valid name and trims surrounding whitespace", () => {
+    const r = categoryNameInputSchema.safeParse({ name: "  غذا  " });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.name).toBe("غذا");
+  });
+
+  it.each(["", "   "])("rejects a blank name (%j)", (name) => {
+    expect(categoryNameInputSchema.safeParse({ name }).success).toBe(false);
+  });
+
+  it("rejects a name longer than 60 characters", () => {
+    expect(categoryNameInputSchema.safeParse({ name: "a".repeat(60) }).success).toBe(true);
+    expect(categoryNameInputSchema.safeParse({ name: "a".repeat(61) }).success).toBe(false);
+  });
+
+  it("strips extra keys so kind and ownership cannot be changed by a rename", () => {
+    const r = categoryNameInputSchema.safeParse({
+      name: "غذا",
+      kind: "income",
+      userId: "attacker",
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect("kind" in r.data).toBe(false);
+      expect("userId" in r.data).toBe(false);
+    }
   });
 });
