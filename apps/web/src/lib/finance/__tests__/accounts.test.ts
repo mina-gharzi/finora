@@ -17,6 +17,7 @@ const h = vi.hoisted(() => ({
     updateCalls: 0,
     deleteCalls: 0,
     whereConditions: [] as unknown[],
+    lockArgs: [] as string[],
   },
 }));
 
@@ -61,6 +62,7 @@ beforeEach(() => {
   h.state.insertCalls = 0;
   h.state.updateCalls = 0;
   h.state.deleteCalls = 0;
+  h.state.lockArgs = [];
 });
 
 describe("createAccount", () => {
@@ -154,6 +156,7 @@ describe("findAccountForUser", () => {
 describe("deleteAccount", () => {
   it("deletes an account owned by the user when it has no transactions", async () => {
     h.state.selectQueue = [[accountRow()], [{ value: 0 }]];
+    h.state.deleteResult = [accountRow()];
 
     await expect(deleteAccount(OWNER, ACCOUNT_ID)).resolves.toEqual({
       ok: true,
@@ -189,6 +192,34 @@ describe("deleteAccount", () => {
       transactionCount: 3,
     });
     expect(h.state.deleteCalls).toBe(0);
+  });
+
+  it("locks the account row FOR UPDATE before counting and deleting", async () => {
+    h.state.selectQueue = [[accountRow()], [{ value: 0 }]];
+    h.state.deleteResult = [accountRow()];
+
+    await expect(deleteAccount(OWNER, ACCOUNT_ID)).resolves.toEqual({
+      ok: true,
+    });
+    // Serializes deletion against a concurrent transaction insert, which takes
+    // a conflicting key-share lock on the account row.
+    expect(h.state.lockArgs).toEqual(["update"]);
+  });
+
+  it("scopes the delete statement to both the account id and the owner", async () => {
+    h.state.selectQueue = [[accountRow()], [{ value: 0 }]];
+    h.state.deleteResult = [accountRow()];
+
+    await deleteAccount(OWNER, ACCOUNT_ID);
+
+    expect(h.state.deleteCalls).toBe(1);
+    const { sql, params } = new PgDialect().sqlToQuery(
+      h.state.whereConditions[h.state.whereConditions.length - 1] as never,
+    );
+    expect(sql).toContain("id");
+    expect(sql).toContain("user_id");
+    expect(params).toContain(OWNER);
+    expect(params).toContain(ACCOUNT_ID);
   });
 });
 

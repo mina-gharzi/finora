@@ -1,4 +1,7 @@
 import "server-only";
+import { MIN_SESSION_SECRET_LENGTH } from "./auth-constants";
+
+export { MIN_SESSION_SECRET_LENGTH };
 
 /**
  * Server-only environment access.
@@ -18,9 +21,7 @@ function readRequired(name: string): string {
   return value;
 }
 
-/** HS256 needs a key of at least 256 bits; 32 characters is the floor. */
-export const MIN_SESSION_SECRET_LENGTH = 32;
-
+/** HS256 needs a key of at least 256 bits; see `auth-constants`. */
 export function getSessionSecret(): string {
   const secret = readRequired("SESSION_SECRET");
   if (secret.length < MIN_SESSION_SECRET_LENGTH) {

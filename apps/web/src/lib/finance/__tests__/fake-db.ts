@@ -18,6 +18,8 @@ export interface FakeDbState {
   deleteCalls: number;
   /** Conditions passed to `.where(...)`, in call order (for scope assertions). */
   whereConditions: unknown[];
+  /** Lock strengths passed to `.for(...)`, in call order (optional recorder). */
+  lockArgs?: string[];
   /** Arguments passed to `.limit(...)`, in call order (optional recorder). */
   limitArgs?: number[];
   /** Arguments passed to `.offset(...)`, in call order (optional recorder). */
@@ -35,6 +37,7 @@ interface Chain extends PromiseLike<unknown[]> {
   limit: (count?: number) => Chain;
   offset: (count?: number) => Chain;
   orderBy: (...clauses: unknown[]) => Chain;
+  for: (strength: string) => Chain;
   values: (value: unknown) => Chain;
   set: (value: unknown) => Chain;
   returning: () => Promise<unknown[]>;
@@ -62,6 +65,10 @@ function makeChain(resolveTo: unknown[], state: FakeDbState): Chain {
       state.orderByArgs?.push(clauses);
       return chain;
     },
+    for: (strength) => {
+      state.lockArgs?.push(strength);
+      return chain;
+    },
     values: (value: unknown) => {
       state.insertedValues.push(value);
       return chain;
@@ -78,7 +85,7 @@ function makeChain(resolveTo: unknown[], state: FakeDbState): Chain {
 }
 
 export function createFakeDb(state: FakeDbState) {
-  return {
+  const db = {
     select: () => makeChain(state.selectQueue.shift() ?? [], state),
     insert: () => {
       state.insertCalls += 1;
@@ -92,7 +99,12 @@ export function createFakeDb(state: FakeDbState) {
       state.deleteCalls += 1;
       return makeChain(state.deleteResult, state);
     },
+    // No real connections or rollback: the callback simply runs against the
+    // same shared fake state, which is enough to exercise transactional
+    // read-check-write flows deterministically.
+    transaction: (callback: (tx: unknown) => Promise<unknown>) => callback(db),
   };
+  return db;
 }
 
 export function createFakeDbState(): FakeDbState {

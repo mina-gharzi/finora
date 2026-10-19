@@ -1,5 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { PUBLIC_ROUTES, SESSION_COOKIE_NAME } from "@/lib/auth-constants";
+import {
+  MIN_SESSION_SECRET_LENGTH,
+  PUBLIC_ROUTES,
+  SESSION_COOKIE_NAME,
+} from "@/lib/auth-constants";
 import { verifySessionToken } from "@/lib/session-token";
 
 /**
@@ -7,16 +11,23 @@ import { verifySessionToken } from "@/lib/session-token";
  * unauthenticated users out of the app (and signed-in users off the auth
  * pages), but it is NOT the authorization boundary — every server action and
  * data read re-verifies the session in the Data Access Layer.
+ *
+ * The signing secret is validated with exactly the same rules the server-side
+ * session reader applies (trimmed, at least
+ * `MIN_SESSION_SECRET_LENGTH` characters): a missing or weak secret must fail
+ * closed here too, so the proxy never attempts HMAC verification with a key
+ * the rest of the application would refuse to use.
  */
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublicRoute = (PUBLIC_ROUTES as readonly string[]).includes(pathname);
 
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  const userId = await verifySessionToken(
-    token,
-    process.env.SESSION_SECRET ?? "",
-  );
+  const secret = process.env.SESSION_SECRET?.trim() ?? "";
+  const userId =
+    secret.length >= MIN_SESSION_SECRET_LENGTH
+      ? await verifySessionToken(token, secret)
+      : null;
 
   if (!isPublicRoute && !userId) {
     return NextResponse.redirect(new URL("/login", request.url));

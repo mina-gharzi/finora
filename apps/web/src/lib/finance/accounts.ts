@@ -99,24 +99,56 @@ export type DeleteAccountResult =
  * Deletes an account owned by `userId`. Accounts that still contain transactions
  * are not deleted (to avoid silently wiping financial history). Deletion returns
  * a rich result so callers can present an appropriate message.
+ *
+ * The read-check-delete sequence runs inside ONE transaction and starts with
+ * `SELECT ... FOR UPDATE` on the account row. Because inserting a transaction
+ * takes a conflicting key-share lock on its account, this serializes deletion
+ * against concurrent inserts: either the insert commits first and the count
+ * below sees it (deletion refused), or the delete commits first and the insert
+ * fails its foreign-key check instead of being silently cascade-removed. The
+ * final statement is additionally scoped by `id = ? AND user_id = ?`, so no
+ * foreign row can ever be deleted.
  */
 export async function deleteAccount(
   userId: string,
   accountId: string,
 ): Promise<DeleteAccountResult> {
-  // Authorize first (shared ownership guard), then inspect and delete by id.
-  const account = await findAccountForUser(accountId, userId);
-  if (!account) {
-    return { ok: false, reason: "not_found" };
-  }
+  return getDb().transaction(async (tx) => {
+    const [account] = await tx
+      .select()
+      .from(accounts)
+      .where(eq(accounts.id, accountId))
+      .limit(1)
+      .for("update");
 
-  const transactionCount = await countTransactionsForAccount(accountId);
-  if (transactionCount > 0) {
-    return { ok: false, reason: "has_transactions", transactionCount };
-  }
+    if (!account || account.userId !== userId) {
+      return { ok: false, reason: "not_found" } as DeleteAccountResult;
+    }
 
-  await getDb().delete(accounts).where(eq(accounts.id, accountId));
-  return { ok: true };
+    const [row] = await tx
+      .select({ value: count() })
+      .from(transactions)
+      .where(eq(transactions.accountId, accountId));
+    const transactionCount = row?.value ?? 0;
+
+    if (transactionCount > 0) {
+      return {
+        ok: false,
+        reason: "has_transactions",
+        transactionCount,
+      } as DeleteAccountResult;
+    }
+
+    const deleted = await tx
+      .delete(accounts)
+      .where(and(eq(accounts.id, accountId), eq(accounts.userId, userId)))
+      .returning();
+
+    if (deleted.length === 0) {
+      return { ok: false, reason: "not_found" } as DeleteAccountResult;
+    }
+    return { ok: true } as DeleteAccountResult;
+  });
 }
 
 export type SetAccountArchivedResult =
