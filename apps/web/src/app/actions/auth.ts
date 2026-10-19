@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { sendInitialVerificationEmail } from "@/app/actions/account-recovery";
 import type { AuthFormState } from "@/lib/auth-form";
 import { getAuthLimiters } from "@/lib/auth-rate-limit";
 import { getClientIp } from "@/lib/client-ip";
@@ -58,6 +59,11 @@ export async function registerAction(
     // Anything else (connection loss, etc.) is a real failure, not a duplicate.
     throw error;
   }
+
+  // Best-effort first verification email. Failures never fail registration:
+  // the account exists and the in-app banner's resend action is the retry
+  // path (and the surface that reports delivery problems to the user).
+  await sendInitialVerificationEmail({ userId, email, name });
 
   await createSession(userId);
   redirect("/");

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   verifyPassword: vi.fn(),
   hashPassword: vi.fn(async () => "hash"),
   createSession: vi.fn(async () => {}),
+  sendInitialVerificationEmail: vi.fn(async () => {}),
   ip: "203.0.113.9",
 }));
 
@@ -34,6 +35,9 @@ vi.mock("@/lib/password", () => ({
 vi.mock("@/lib/session", () => ({
   createSession: mocks.createSession,
   deleteSession: vi.fn(),
+}));
+vi.mock("@/app/actions/account-recovery", () => ({
+  sendInitialVerificationEmail: mocks.sendInitialVerificationEmail,
 }));
 
 import { loginAction, registerAction } from "@/app/actions/auth";
@@ -127,5 +131,35 @@ describe("registerAction database errors", () => {
       Object.assign(new Error("db down"), { code: "ECONNREFUSED" }),
     );
     await expect(submit()).rejects.toThrow("db down");
+  });
+});
+
+describe("registerAction verification email", () => {
+  const submit = () =>
+    registerAction(
+      {},
+      form({ name: "نام تست", email: "new@example.com", password: "password1" }),
+    );
+
+  it("kicks off the initial verification email for the new account", async () => {
+    mocks.findUserByEmail.mockResolvedValue(null);
+    mocks.createUser.mockResolvedValue({ id: "new" });
+
+    await expect(submit()).rejects.toThrow("NEXT_REDIRECT:/");
+    expect(mocks.sendInitialVerificationEmail).toHaveBeenCalledWith({
+      userId: "new",
+      email: "new@example.com",
+      name: "نام تست",
+    });
+  });
+
+  it("still completes registration when the email adapter is unconfigured", async () => {
+    mocks.findUserByEmail.mockResolvedValue(null);
+    mocks.createUser.mockResolvedValue({ id: "new" });
+    // sendInitialVerificationEmail never throws by contract (best-effort);
+    // simulate the adapter reporting 'unavailable' without failing.
+    mocks.sendInitialVerificationEmail.mockResolvedValueOnce("unavailable" as never);
+
+    await expect(submit()).rejects.toThrow("NEXT_REDIRECT:/");
   });
 });

@@ -17,6 +17,16 @@ interface AuthLimiters {
   loginIp: RateLimiter;
   /** All registration attempts per client address. */
   registerIp: RateLimiter;
+  /** Password-reset requests per client address. */
+  forgotIp: RateLimiter;
+  /** Password-reset requests per submitted email (existing or not). */
+  forgotEmail: RateLimiter;
+  /** Reset-password / verify-email submissions per client address. */
+  tokenIp: RateLimiter;
+  /** Verification resends per signed-in user. */
+  resendUser: RateLimiter;
+  /** Verification resends per client address. */
+  resendIp: RateLimiter;
 }
 
 const globalForLimiters = globalThis as unknown as {
@@ -29,6 +39,11 @@ export function getAuthLimiters(): AuthLimiters {
       loginAccount: createRateLimiter({ limit: 5, windowMs: FIFTEEN_MINUTES }),
       loginIp: createRateLimiter({ limit: 20, windowMs: FIFTEEN_MINUTES }),
       registerIp: createRateLimiter({ limit: 20, windowMs: ONE_HOUR }),
+      forgotIp: createRateLimiter({ limit: 10, windowMs: ONE_HOUR }),
+      forgotEmail: createRateLimiter({ limit: 3, windowMs: ONE_HOUR }),
+      tokenIp: createRateLimiter({ limit: 20, windowMs: FIFTEEN_MINUTES }),
+      resendUser: createRateLimiter({ limit: 3, windowMs: ONE_HOUR }),
+      resendIp: createRateLimiter({ limit: 10, windowMs: ONE_HOUR }),
     };
   }
   return globalForLimiters.finoraAuthLimiters;

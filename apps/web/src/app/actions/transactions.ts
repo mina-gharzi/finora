@@ -6,7 +6,8 @@ import {
   type DeleteTransactionState,
   type TransactionFormState,
 } from "@/lib/transactions-form";
-import { requireUserId } from "@/lib/dal";
+import { VERIFY_EMAIL_REQUIRED_MESSAGE } from "@/lib/account-recovery";
+import { isEmailVerified, requireUserId } from "@/lib/dal";
 import { parseTransactionReturnTo } from "@/lib/finance/history-query";
 import {
   createTransaction,
@@ -65,6 +66,9 @@ export async function createTransactionAction(
   formData: FormData,
 ): Promise<TransactionFormState> {
   const userId = await requireUserId();
+  if (!(await isEmailVerified(userId))) {
+    return { status: "error", message: VERIFY_EMAIL_REQUIRED_MESSAGE };
+  }
 
   const result = await createTransaction(userId, readTransactionInput(formData));
 
@@ -98,6 +102,9 @@ export async function updateTransactionAction(
   formData: FormData,
 ): Promise<TransactionFormState> {
   const userId = await requireUserId();
+  if (!(await isEmailVerified(userId))) {
+    return { status: "error", message: VERIFY_EMAIL_REQUIRED_MESSAGE };
+  }
 
   const transactionId = readText(formData.get("transactionId")).trim();
   const returnHref = parseTransactionReturnTo(
@@ -141,6 +148,9 @@ export async function deleteTransactionAction(
   formData: FormData,
 ): Promise<DeleteTransactionState> {
   const userId = await requireUserId();
+  if (!(await isEmailVerified(userId))) {
+    return { status: "error", message: VERIFY_EMAIL_REQUIRED_MESSAGE };
+  }
 
   const transactionId = readText(formData.get("transactionId")).trim();
   const returnHref = parseTransactionReturnTo(

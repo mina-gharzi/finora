@@ -3,6 +3,7 @@ import {
   MIN_SESSION_SECRET_LENGTH,
   PUBLIC_ROUTES,
   SESSION_COOKIE_NAME,
+  TOKEN_ROUTES,
 } from "@/lib/auth-constants";
 import { verifySessionToken } from "@/lib/session-token";
 
@@ -20,6 +21,11 @@ import { verifySessionToken } from "@/lib/session-token";
  */
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  // Token pages (verification, password reset) are reachable whether or not
+  // a session exists: the emailed link may be opened in any browser.
+  if ((TOKEN_ROUTES as readonly string[]).includes(pathname)) {
+    return NextResponse.next();
+  }
   const isPublicRoute = (PUBLIC_ROUTES as readonly string[]).includes(pathname);
 
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;

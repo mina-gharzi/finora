@@ -44,8 +44,41 @@ export const loginSchema = z.object({
     .max(MAX_LOGIN_PASSWORD_LENGTH, { error: "گذرواژه بیش از حد طولانی است." }),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: emailSchema,
+});
+
+/**
+ * Reset/verification links carry a 43-character base64url token; the cap only
+ * needs to reject oversized garbage cheaply before it reaches hashing/SQL.
+ */
+export const authTokenFieldSchema = z
+  .string({ error: "پیوند نامعتبر است." })
+  .trim()
+  .min(1, { error: "پیوند نامعتبر است." })
+  .max(256, { error: "پیوند نامعتبر است." });
+
+export const resetPasswordSchema = z
+  .object({
+    token: authTokenFieldSchema,
+    password: passwordSchema,
+    confirm: z
+      .string({ error: "تکرار گذرواژه را وارد کنید." })
+      .min(1, { error: "تکرار گذرواژه را وارد کنید." }),
+  })
+  .refine((value) => value.password === value.confirm, {
+    error: "گذرواژه و تکرار آن یکسان نیستند.",
+    path: ["confirm"],
+  });
+
+export const verifyEmailSchema = z.object({
+  token: authTokenFieldSchema,
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 
 /** Flattens a Zod error into a `{ field: firstMessage }` map for form display. */
 export function toFieldErrors(error: z.ZodError): Record<string, string> {

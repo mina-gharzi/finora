@@ -20,6 +20,7 @@ vi.mock("@/lib/dal", () => ({
     h.requireUserIdCalls += 1;
     return "user-1";
   }),
+  isEmailVerified: vi.fn(async () => true),
 }));
 
 vi.mock("@/lib/finance/transactions", () => ({
@@ -59,6 +60,7 @@ import {
   EMPTY_DELETE_TRANSACTION_STATE,
   EMPTY_TRANSACTION_FORM_STATE,
 } from "@/lib/transactions-form";
+import { VERIFY_EMAIL_REQUIRED_MESSAGE } from "@/lib/account-recovery";
 import * as transactionsDal from "@/lib/finance/transactions";
 import * as dal from "@/lib/dal";
 import { revalidatePath } from "next/cache";
@@ -297,5 +299,35 @@ describe("transaction actions — unauthenticated", () => {
     await expect(
       createTransactionAction(EMPTY_TRANSACTION_FORM_STATE, baseForm()),
     ).rejects.toThrow();
+  });
+});
+
+describe("transaction actions — email verification gate", () => {
+  it("blocks every mutation for an unverified account before touching the domain", async () => {
+    vi.mocked(dal.isEmailVerified).mockResolvedValue(false);
+
+    const createRes = await createTransactionAction(
+      EMPTY_TRANSACTION_FORM_STATE,
+      baseForm(),
+    );
+    expect(createRes.status).toBe("error");
+    expect(createRes.message).toBe(VERIFY_EMAIL_REQUIRED_MESSAGE);
+    expect(transactionsDal.createTransaction).not.toHaveBeenCalled();
+
+    const updateRes = await updateTransactionAction(
+      EMPTY_TRANSACTION_FORM_STATE,
+      editForm(),
+    );
+    expect(updateRes.status).toBe("error");
+    expect(updateRes.message).toBe(VERIFY_EMAIL_REQUIRED_MESSAGE);
+    expect(transactionsDal.updateTransaction).not.toHaveBeenCalled();
+
+    const deleteRes = await deleteTransactionAction(
+      EMPTY_DELETE_TRANSACTION_STATE,
+      editForm(),
+    );
+    expect(deleteRes.status).toBe("error");
+    expect(deleteRes.message).toBe(VERIFY_EMAIL_REQUIRED_MESSAGE);
+    expect(transactionsDal.deleteTransaction).not.toHaveBeenCalled();
   });
 });

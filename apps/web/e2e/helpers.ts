@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from "@playwright/test";
+import { markEmailVerified } from "./db";
 
 export interface TestCredentials {
   name: string;
@@ -43,6 +44,9 @@ export async function registerUser(
   await field(page, "password").fill(credentials.password);
   await page.getByRole("button", { name: "ثبت‌نام" }).click();
   await expect(page).toHaveURL("/");
+  // Financial mutations require a verified email; tests have no inbox, so
+  // apply the verification end state the emailed link would produce.
+  await markEmailVerified(credentials.email);
 }
 
 /** Registers a throwaway account and leaves the browser signed in. */

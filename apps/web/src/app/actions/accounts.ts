@@ -7,7 +7,8 @@ import type {
   ArchiveAccountState,
   DeleteAccountState,
 } from "@/lib/accounts-form";
-import { requireUserId } from "@/lib/dal";
+import { VERIFY_EMAIL_REQUIRED_MESSAGE } from "@/lib/account-recovery";
+import { isEmailVerified, requireUserId } from "@/lib/dal";
 import {
   createAccount,
   deleteAccount,
@@ -44,6 +45,9 @@ export async function createAccountAction(
   formData: FormData,
 ): Promise<AccountFormState> {
   const userId = await requireUserId();
+  if (!(await isEmailVerified(userId))) {
+    return { status: "error", message: VERIFY_EMAIL_REQUIRED_MESSAGE };
+  }
 
   const result = await createAccount(userId, {
     name: formData.get("name"),
@@ -70,6 +74,9 @@ export async function deleteAccountAction(
   formData: FormData,
 ): Promise<DeleteAccountState> {
   const userId = await requireUserId();
+  if (!(await isEmailVerified(userId))) {
+    return { status: "error", message: VERIFY_EMAIL_REQUIRED_MESSAGE };
+  }
 
   const accountId = formData.get("accountId");
   if (typeof accountId !== "string" || accountId.trim() === "") {
@@ -105,6 +112,9 @@ export async function setAccountArchivedAction(
   formData: FormData,
 ): Promise<ArchiveAccountState> {
   const userId = await requireUserId();
+  if (!(await isEmailVerified(userId))) {
+    return { status: "error", message: VERIFY_EMAIL_REQUIRED_MESSAGE };
+  }
 
   const accountId = readText(formData.get("accountId")).trim();
   const archived = readText(formData.get("archived")) === "true";

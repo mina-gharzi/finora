@@ -26,6 +26,26 @@ export async function verifySessionToken(
   token: string | undefined | null,
   secret: string,
 ): Promise<string | null> {
+  const details = await verifySessionTokenDetails(token, secret);
+  return details?.userId ?? null;
+}
+
+export interface SessionTokenDetails {
+  userId: string;
+  /** JWT `iat`, in seconds since the epoch (floored, per the JWT spec). */
+  issuedAt: number;
+}
+
+/**
+ * Same verification as `verifySessionToken`, but also surfaces the token's
+ * issue time. The data access layer compares it against the user's
+ * `auth_valid_after` watermark so password resets can invalidate every
+ * previously issued session without a revocation list.
+ */
+export async function verifySessionTokenDetails(
+  token: string | undefined | null,
+  secret: string,
+): Promise<SessionTokenDetails | null> {
   if (!token || !secret) {
     return null;
   }
@@ -35,7 +55,15 @@ export async function verifySessionToken(
       algorithms: [SESSION_ALGORITHM],
     });
     const userId = payload.userId;
-    return typeof userId === "string" && userId.length > 0 ? userId : null;
+    const issuedAt = payload.iat;
+    if (
+      typeof userId === "string" &&
+      userId.length > 0 &&
+      typeof issuedAt === "number"
+    ) {
+      return { userId, issuedAt };
+    }
+    return null;
   } catch {
     return null;
   }

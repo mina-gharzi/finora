@@ -36,3 +36,6 @@ apps/web/.git-backup/
 # Git history backups
 apps/web/.git-backup/
 apps/web/.git-nested-backup/
+
+# Development email outbox (contains raw recovery links — never commit)
+.email-outbox/

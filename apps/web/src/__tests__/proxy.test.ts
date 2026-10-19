@@ -63,6 +63,36 @@ describe("proxy route guard", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 
+  it("allows anonymous visitors onto the forgot-password page", async () => {
+    const response = await run("/forgot-password");
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("keeps the forgot-password page away from signed-in users (like other auth pages)", async () => {
+    const token = await signSessionToken("user-1", STRONG_SECRET);
+    const response = await run("/forgot-password", await cookieHeader(token));
+    expect(response.status).toBe(307);
+    expect(locationPath(response)).toBe("/");
+  });
+
+  it("lets anonymous visitors open token pages (token itself is the credential)", async () => {
+    for (const path of ["/verify-email?token=abc", "/reset-password?token=abc"]) {
+      const response = await run(path);
+      expect(response.headers.get("x-middleware-next")).toBe("1");
+      expect(response.headers.get("location")).toBeNull();
+    }
+  });
+
+  it("keeps token pages reachable for signed-in users too (resend/verify while browsing)", async () => {
+    const token = await signSessionToken("user-1", STRONG_SECRET);
+    for (const path of ["/verify-email?token=abc", "/reset-password?token=abc"]) {
+      const response = await run(path, await cookieHeader(token));
+      expect(response.headers.get("x-middleware-next")).toBe("1");
+      expect(response.headers.get("location")).toBeNull();
+    }
+  });
+
   it("treats a token signed with a different secret as unauthenticated", async () => {
     const token = await signSessionToken(
       "user-1",

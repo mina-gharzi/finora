@@ -20,12 +20,20 @@ export default function LoginPage() {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <LoginForm />
-        <p className="text-sm text-muted-foreground">
-          حساب ندارید؟{" "}
-          <Link href="/register" className="text-primary hover:underline">
-            ثبت‌نام کنید
+        <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+          <Link
+            href="/forgot-password"
+            className="text-primary hover:underline"
+          >
+            گذرواژه خود را فراموش کرده‌اید؟
           </Link>
-        </p>
+          <p>
+            حساب ندارید؟{" "}
+            <Link href="/register" className="text-primary hover:underline">
+              ثبت‌نام کنید
+            </Link>
+          </p>
+        </div>
       </CardContent>
     </Card>
   );

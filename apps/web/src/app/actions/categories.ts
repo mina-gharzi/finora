@@ -7,7 +7,8 @@ import type {
   CategoryRenameState,
   DeleteCategoryState,
 } from "@/lib/categories-form";
-import { requireUserId } from "@/lib/dal";
+import { VERIFY_EMAIL_REQUIRED_MESSAGE } from "@/lib/account-recovery";
+import { isEmailVerified, requireUserId } from "@/lib/dal";
 import {
   createCategory,
   deleteCategory,
@@ -47,6 +48,9 @@ export async function createCategoryAction(
   formData: FormData,
 ): Promise<CategoryFormState> {
   const userId = await requireUserId();
+  if (!(await isEmailVerified(userId))) {
+    return { status: "error", message: VERIFY_EMAIL_REQUIRED_MESSAGE };
+  }
 
   const result = await createCategory(userId, {
     name: readText(formData.get("name")),
@@ -79,6 +83,9 @@ export async function renameCategoryAction(
   formData: FormData,
 ): Promise<CategoryRenameState> {
   const userId = await requireUserId();
+  if (!(await isEmailVerified(userId))) {
+    return { status: "error", message: VERIFY_EMAIL_REQUIRED_MESSAGE };
+  }
 
   const categoryId = readText(formData.get("categoryId")).trim();
   if (categoryId === "") {
@@ -118,6 +125,9 @@ export async function deleteCategoryAction(
   formData: FormData,
 ): Promise<DeleteCategoryState> {
   const userId = await requireUserId();
+  if (!(await isEmailVerified(userId))) {
+    return { status: "error", message: VERIFY_EMAIL_REQUIRED_MESSAGE };
+  }
 
   const categoryId = readText(formData.get("categoryId")).trim();
   if (categoryId === "") {

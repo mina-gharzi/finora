@@ -19,6 +19,7 @@ vi.mock("@/lib/dal", () => ({
     h.requireUserIdCalls += 1;
     return "user-1";
   }),
+  isEmailVerified: vi.fn(async () => true),
 }));
 
 vi.mock("@/lib/finance/categories", () => ({
@@ -53,6 +54,7 @@ import {
   EMPTY_CATEGORY_RENAME_STATE,
   EMPTY_DELETE_CATEGORY_STATE,
 } from "@/lib/categories-form";
+import { VERIFY_EMAIL_REQUIRED_MESSAGE } from "@/lib/account-recovery";
 import * as categoriesDal from "@/lib/finance/categories";
 import * as dal from "@/lib/dal";
 import { revalidatePath } from "next/cache";
@@ -217,5 +219,34 @@ describe("deleteCategoryAction", () => {
     const res = await deleteCategoryAction(EMPTY_DELETE_CATEGORY_STATE, fd);
     expect(res.status).toBe("error");
     expect(res.message).toBeDefined();
+  });
+});
+
+describe("category actions — email verification gate", () => {
+  it("blocks every mutation for an unverified account before touching the domain", async () => {
+    vi.mocked(dal.isEmailVerified).mockResolvedValue(false);
+
+    const createForm = new FormData();
+    createForm.set("name", "خرید روزانه");
+    createForm.set("kind", "expense");
+    const createRes = await createCategoryAction(EMPTY_CATEGORY_FORM_STATE, createForm);
+    expect(createRes.status).toBe("error");
+    expect(createRes.message).toBe(VERIFY_EMAIL_REQUIRED_MESSAGE);
+    expect(categoriesDal.createCategory).not.toHaveBeenCalled();
+
+    const renameForm = new FormData();
+    renameForm.set("categoryId", "cat-1");
+    renameForm.set("name", "خرید هفتگی");
+    const renameRes = await renameCategoryAction(EMPTY_CATEGORY_RENAME_STATE, renameForm);
+    expect(renameRes.status).toBe("error");
+    expect(renameRes.message).toBe(VERIFY_EMAIL_REQUIRED_MESSAGE);
+    expect(categoriesDal.renameCategory).not.toHaveBeenCalled();
+
+    const deleteForm = new FormData();
+    deleteForm.set("categoryId", "cat-1");
+    const deleteRes = await deleteCategoryAction(EMPTY_DELETE_CATEGORY_STATE, deleteForm);
+    expect(deleteRes.status).toBe("error");
+    expect(deleteRes.message).toBe(VERIFY_EMAIL_REQUIRED_MESSAGE);
+    expect(categoriesDal.deleteCategory).not.toHaveBeenCalled();
   });
 });

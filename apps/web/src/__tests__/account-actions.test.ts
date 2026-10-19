@@ -15,6 +15,7 @@ vi.mock("@/lib/dal", () => ({
     h.requireUserIdCalls += 1;
     return "user-1";
   }),
+  isEmailVerified: vi.fn(async () => true),
 }));
 
 vi.mock("@/lib/finance/accounts", () => ({
@@ -49,6 +50,7 @@ import {
   EMPTY_ARCHIVE_ACCOUNT_STATE,
   EMPTY_DELETE_ACCOUNT_STATE,
 } from "@/lib/accounts-form";
+import { VERIFY_EMAIL_REQUIRED_MESSAGE } from "@/lib/account-recovery";
 import * as accountsDal from "@/lib/finance/accounts";
 import * as dal from "@/lib/dal";
 import { revalidatePath } from "next/cache";
@@ -219,5 +221,53 @@ describe("setAccountArchivedAction", () => {
     await expect(
       setAccountArchivedAction(EMPTY_ARCHIVE_ACCOUNT_STATE, fd),
     ).rejects.toThrow();
+  });
+});
+
+describe("account actions — email verification gate", () => {
+  it("blocks every mutation for an unverified account before touching the domain", async () => {
+    vi.mocked(dal.isEmailVerified).mockResolvedValue(false);
+
+    const createForm = new FormData();
+    createForm.set("name", "نقدی");
+    createForm.set("type", "cash");
+    createForm.set("openingBalance", "0");
+    const createRes = await createAccountAction(EMPTY_ACCOUNT_FORM_STATE, createForm);
+    expect(createRes.status).toBe("error");
+    expect(createRes.message).toBe(VERIFY_EMAIL_REQUIRED_MESSAGE);
+    expect(accountsDal.createAccount).not.toHaveBeenCalled();
+
+    const deleteForm = new FormData();
+    deleteForm.set("accountId", "acc-1");
+    const deleteRes = await deleteAccountAction(EMPTY_DELETE_ACCOUNT_STATE, deleteForm);
+    expect(deleteRes.status).toBe("error");
+    expect(deleteRes.message).toBe(VERIFY_EMAIL_REQUIRED_MESSAGE);
+    expect(accountsDal.deleteAccount).not.toHaveBeenCalled();
+
+    const archiveForm = new FormData();
+    archiveForm.set("accountId", "acc-1");
+    archiveForm.set("archived", "true");
+    const archiveRes = await setAccountArchivedAction(EMPTY_ARCHIVE_ACCOUNT_STATE, archiveForm);
+    expect(archiveRes.status).toBe("error");
+    expect(archiveRes.message).toBe(VERIFY_EMAIL_REQUIRED_MESSAGE);
+    expect(accountsDal.setAccountArchived).not.toHaveBeenCalled();
+
+    expect(h.requireUserIdCalls).toBe(3);
+  });
+
+  it("still asks the session for the owner before the gate (no enumeration by id)", async () => {
+    vi.mocked(dal.isEmailVerified).mockResolvedValue(false);
+
+    const fd = new FormData();
+    fd.set("name", "نقدی");
+    fd.set("type", "cash");
+    fd.set("openingBalance", "0");
+
+    await createAccountAction(EMPTY_ACCOUNT_FORM_STATE, fd);
+    // The session is resolved first, so the gate answers for any authenticated
+    // id without leaking whether a resource exists.
+    expect(dal.requireUserId).toHaveBeenCalled();
+    expect(h.requireUserIdCalls).toBe(1);
+    expect(accountsDal.createAccount).not.toHaveBeenCalled();
   });
 });

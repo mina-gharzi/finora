@@ -18,5 +18,12 @@ export const SESSION_ALGORITHM = "HS256";
  */
 export const MIN_SESSION_SECRET_LENGTH = 32;
 
-/** Routes reachable without a session. */
-export const PUBLIC_ROUTES = ["/login", "/register"] as const;
+/** Routes reachable without a session. Signed-in users are bounced off them. */
+export const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password"] as const;
+
+/**
+ * Routes that accept a token from an emailed link and are therefore open to
+ * both anonymous and signed-in visitors (a reset link may be opened in any
+ * browser). Neither redirect rule applies to them.
+ */
+export const TOKEN_ROUTES = ["/verify-email", "/reset-password"] as const;

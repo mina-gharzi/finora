@@ -8,6 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { ownerUserId } from "./ownership";
@@ -15,12 +16,20 @@ import { ownerUserId } from "./ownership";
 /**
  * Users. `email` is stored normalized (trimmed, lowercased) by the validation
  * layer, and is unique so two accounts cannot share an address.
+ *
+ * `email_verified_at` is set once the owner proves control of the address via
+ * an emailed link. It is NULL for accounts created after verification was
+ * introduced. `auth_valid_after` is a session-invalidation watermark: session
+ * tokens issued before it (by JWT `iat`) no longer authenticate. Both are
+ * nullable so the migration is purely additive for existing rows.
  */
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+  authValidAfter: timestamp("auth_valid_after", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -28,6 +37,45 @@ export const users = pgTable("users", {
 
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
+
+/**
+ * Single-use, purpose-bound tokens for email verification and password reset.
+ *
+ * Only the SHA-256 hash of a token is stored, so a database leak does not
+ * yield usable links. A token is consumed by a conditional UPDATE that sets
+ * `consumed_at`, which makes concurrent use impossible (exactly one statement
+ * wins). `purpose` prevents a reset token from verifying an email and vice
+ * versa. Deleting a user cascades their tokens away.
+ */
+export const authTokens = pgTable(
+  "auth_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: ownerUserId(),
+    purpose: text("purpose").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "auth_tokens_purpose_check",
+      sql`${table.purpose} in ('email_verify', 'password_reset')`,
+    ),
+    // Lookups always arrive by raw token, hashed then matched exactly.
+    uniqueIndex("auth_tokens_token_hash_idx").on(table.tokenHash),
+    // Issuing/cleanup deletes a user's previous tokens for a purpose.
+    index("auth_tokens_user_id_purpose_idx").on(table.userId, table.purpose),
+    // Supports expiry sweeps.
+    index("auth_tokens_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
+export type AuthTokenRow = typeof authTokens.$inferSelect;
+export type NewAuthTokenRow = typeof authTokens.$inferInsert;
 
 /**
  * Financial accounts owned by a user. `opening_balance` is an integer number

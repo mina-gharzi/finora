@@ -37,6 +37,36 @@ export function getDatabaseUrl(): string {
   return readRequired("DATABASE_URL");
 }
 
+/** Default origin used to build absolute links in outgoing emails. */
+const DEFAULT_APP_URL = "http://127.0.0.1:3000";
+
+/**
+ * Public origin of this deployment (scheme + host, optional port, no
+ * trailing slash). Optional: local development and tests default to the
+ * dev server origin. When set it must parse as an absolute http(s) URL.
+ */
+export function getAppUrl(): string {
+  const raw = process.env.APP_URL?.trim();
+  if (!raw) {
+    return DEFAULT_APP_URL;
+  }
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(
+      `Environment variable "APP_URL" must be an absolute http(s) URL, ` +
+        `for example "https://finora.example.com".`,
+    );
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(
+      `Environment variable "APP_URL" must use http or https.`,
+    );
+  }
+  return url.toString().replace(/\/+$/, "");
+}
+
 export function isProduction(): boolean {
   return process.env.NODE_ENV === "production";
 }

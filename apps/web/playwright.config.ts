@@ -1,4 +1,20 @@
+import { readFileSync } from "node:fs";
 import { defineConfig, devices } from "@playwright/test";
+
+// The Next server loads .env itself, but the Playwright runner (and its
+// workers, which inherit process.env) needs the same values for tests that
+// talk to the database directly. Never override an existing value.
+try {
+  for (const line of readFileSync(".env", "utf8").split("\n")) {
+    const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line.trimEnd());
+    if (match && process.env[match[1]] === undefined) {
+      process.env[match[1]] = match[2];
+    }
+  }
+} catch {
+  // No .env file (e.g. CI injects env another way); helpers fail loudly if
+  // a required value is still missing.
+}
 
 export default defineConfig({
   testDir: "./e2e",

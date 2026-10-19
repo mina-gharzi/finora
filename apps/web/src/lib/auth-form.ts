@@ -10,3 +10,14 @@ export interface AuthFormState {
 }
 
 export const EMPTY_AUTH_STATE: AuthFormState = {};
+
+/**
+ * State for the recovery/verification flows. `success` marks a definitively
+ * completed step (e.g. the token was consumed and the password changed) so
+ * the form can render a success panel instead of an error alert.
+ */
+export interface RecoveryFormState extends AuthFormState {
+  success?: boolean;
+}
+
+export const EMPTY_RECOVERY_STATE: RecoveryFormState = {};
