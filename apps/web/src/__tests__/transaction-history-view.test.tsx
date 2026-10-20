@@ -74,7 +74,13 @@ const ITEMS: TransactionHistoryViewProps["items"] = [
   },
 ];
 
-const EMPTY_FILTERS = { type: "", accountId: "", from: "", to: "" };
+const EMPTY_FILTERS = {
+  type: "",
+  accountId: "",
+  from: "",
+  to: "",
+  search: "",
+};
 
 function renderView(overrides: Partial<TransactionHistoryViewProps> = {}) {
   return render(
@@ -211,6 +217,7 @@ describe("TransactionHistoryView — filters", () => {
         accountId: "acc-2",
         from: "2026-01-01",
         to: "2026-12-31",
+        search: "خرید",
       },
       hasActiveFilters: true,
     });
@@ -227,6 +234,22 @@ describe("TransactionHistoryView — filters", () => {
     expect((screen.getByLabelText("تا تاریخ") as HTMLInputElement).value).toBe(
       "2026-12-31",
     );
+    expect(
+      (screen.getByLabelText("جستجو در توضیحات") as HTMLInputElement).value,
+    ).toBe("خرید");
+  });
+
+  it("submits the search term as the q parameter", () => {
+    const { container } = renderView();
+
+    const search = screen.getByLabelText(
+      "جستجو در توضیحات",
+    ) as HTMLInputElement;
+    expect(search.getAttribute("name")).toBe("q");
+
+    const form = container.querySelector("form");
+    expect(form?.getAttribute("action")).toBe("/transactions");
+    expect(form?.getAttribute("method")).toBe("get");
   });
 
   it("lists the user's accounts as filter options", () => {
@@ -274,6 +297,29 @@ describe("TransactionHistoryView — empty states", () => {
     ).toBeTruthy();
     const link = screen.getByRole("link", { name: "نمایش همه تراکنش‌ها" });
     expect(link.getAttribute("href")).toBe("/transactions");
+  });
+
+  it("shows the search-specific empty state when a search matched nothing", () => {
+    renderView({
+      items: [],
+      hasActiveFilters: true,
+      filters: { ...EMPTY_FILTERS, search: "قهوه" },
+    });
+
+    expect(screen.getByText("تراکنشی مطابق جستجو یافت نشد")).toBeTruthy();
+    const link = screen.getByRole("link", { name: "نمایش همه تراکنش‌ها" });
+    expect(link.getAttribute("href")).toBe("/transactions");
+  });
+
+  it("offers the clear link when only a search is active", () => {
+    renderView({
+      filters: { ...EMPTY_FILTERS, search: "خرید" },
+      hasActiveFilters: true,
+    });
+
+    expect(screen.getByRole("link", { name: "پاک کردن" }).getAttribute("href")).toBe(
+      "/transactions",
+    );
   });
 
   it("keeps the export link available for an empty result", () => {

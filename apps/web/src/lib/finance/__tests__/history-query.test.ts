@@ -6,7 +6,9 @@ import {
   hasActiveTransactionFilters,
   parseTransactionHistoryQuery,
   parseTransactionReturnTo,
+  toIlikePattern,
   transactionSearchParamsToRecord,
+  TRANSACTION_SEARCH_MAX_LENGTH,
   type TransactionHistoryQuery,
 } from "../history-query";
 
@@ -19,6 +21,7 @@ describe("parseTransactionHistoryQuery", () => {
       accountId: null,
       from: null,
       to: null,
+      search: null,
       page: 1,
     });
   });
@@ -30,6 +33,7 @@ describe("parseTransactionHistoryQuery", () => {
         accountId: ACCOUNT_ID,
         from: "2026-01-01",
         to: "2026-12-31",
+        q: "خرید",
         page: "3",
       }),
     ).toEqual({
@@ -37,6 +41,7 @@ describe("parseTransactionHistoryQuery", () => {
       accountId: ACCOUNT_ID,
       from: "2026-01-01",
       to: "2026-12-31",
+      search: "خرید",
       page: 3,
     });
   });
@@ -76,6 +81,48 @@ describe("parseTransactionHistoryQuery", () => {
     expect(parseTransactionHistoryQuery({ type: ["expense", "income"] }).type).toBe(
       "expense",
     );
+    expect(parseTransactionHistoryQuery({ q: ["خرید", "فروش"] }).search).toBe(
+      "خرید",
+    );
+  });
+
+  it("trims surrounding whitespace from the search term", () => {
+    expect(parseTransactionHistoryQuery({ q: "  خرید روزانه  " }).search).toBe(
+      "خرید روزانه",
+    );
+  });
+
+  it("treats a whitespace-only search as no search", () => {
+    expect(parseTransactionHistoryQuery({ q: "   " }).search).toBeNull();
+    expect(parseTransactionHistoryQuery({ q: "" }).search).toBeNull();
+  });
+
+  it("drops an overlong search term instead of applying it", () => {
+    expect(
+      parseTransactionHistoryQuery({ q: "x".repeat(TRANSACTION_SEARCH_MAX_LENGTH + 1) })
+        .search,
+    ).toBeNull();
+    expect(
+      parseTransactionHistoryQuery({ q: "x".repeat(TRANSACTION_SEARCH_MAX_LENGTH) })
+        .search,
+    ).toBe("x".repeat(TRANSACTION_SEARCH_MAX_LENGTH));
+  });
+
+  it("keeps LIKE wildcards as literal characters in the parsed term", () => {
+    // Escaping happens in the DAL pattern builder, not in parsing.
+    expect(parseTransactionHistoryQuery({ q: "50%_off" }).search).toBe("50%_off");
+  });
+});
+
+describe("toIlikePattern", () => {
+  it("wraps the term in wildcards for a substring match", () => {
+    expect(toIlikePattern("خرید")).toBe("%خرید%");
+  });
+
+  it("escapes %, _ and backslash so they match literally", () => {
+    expect(toIlikePattern("50%")).toBe("%50\\%%");
+    expect(toIlikePattern("a_b")).toBe("%a\\_b%");
+    expect(toIlikePattern("a\\b")).toBe("%a\\\\b%");
   });
 });
 
@@ -85,6 +132,7 @@ describe("hasActiveTransactionFilters", () => {
     accountId: null,
     from: null,
     to: null,
+    search: null,
     page: 1,
   };
 
@@ -97,6 +145,7 @@ describe("hasActiveTransactionFilters", () => {
     { ...base, accountId: ACCOUNT_ID },
     { ...base, from: "2026-01-01" },
     { ...base, to: "2026-12-31" },
+    { ...base, search: "خرید" },
   ])("is true when a filter is set", (query) => {
     expect(hasActiveTransactionFilters(query)).toBe(true);
   });
@@ -108,6 +157,7 @@ describe("buildTransactionHistoryHref", () => {
     accountId: null,
     from: null,
     to: null,
+    search: null,
     page: 1,
   };
 
@@ -125,9 +175,23 @@ describe("buildTransactionHistoryHref", () => {
     );
   });
 
+  it("preserves the search term", () => {
+    const href = buildTransactionHistoryHref(
+      { ...base, search: "خرید روزانه" },
+      1,
+    );
+    // URLSearchParams encodes the space as "+".
+    expect(href).toBe("/transactions?q=%D8%AE%D8%B1%DB%8C%D8%AF+%D8%B1%D9%88%D8%B2%D8%A7%D9%86%D9%87");
+  });
+
   it("includes page when greater than one", () => {
     const href = buildTransactionHistoryHref({ ...base, from: "2026-01-01" }, 4);
     expect(href).toBe("/transactions?from=2026-01-01&page=4");
+  });
+
+  it("keeps the search term when paginating", () => {
+    const href = buildTransactionHistoryHref({ ...base, search: "خرید" }, 2);
+    expect(href).toBe("/transactions?q=%D8%AE%D8%B1%DB%8C%D8%AF&page=2");
   });
 });
 
@@ -137,6 +201,7 @@ describe("buildTransactionExportHref", () => {
     accountId: null,
     from: null,
     to: null,
+    search: null,
   };
 
   it("returns the bare export path when no filter is active", () => {
@@ -149,9 +214,10 @@ describe("buildTransactionExportHref", () => {
       accountId: ACCOUNT_ID,
       from: "2026-01-01",
       to: "2026-12-31",
+      search: "خرید",
     });
     expect(href).toBe(
-      `/transactions/export?type=expense&accountId=${ACCOUNT_ID}&from=2026-01-01&to=2026-12-31`,
+      `/transactions/export?type=expense&accountId=${ACCOUNT_ID}&from=2026-01-01&to=2026-12-31&q=%D8%AE%D8%B1%DB%8C%D8%AF`,
     );
   });
 
@@ -163,6 +229,7 @@ describe("buildTransactionExportHref", () => {
       accountId: null,
       from: null,
       to: null,
+      search: null,
       page: 7,
     };
     expect(buildTransactionExportHref(query)).toBe(
@@ -197,6 +264,7 @@ describe("buildTransactionEditHref", () => {
     accountId: null,
     from: null,
     to: null,
+    search: null,
     page: 1,
   };
 

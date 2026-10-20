@@ -12,8 +12,8 @@ import { listTransactionHistoryForExport } from "@/lib/finance/transactions";
 
 /**
  * `GET /transactions/export` — downloads the signed-in user's transactions as
- * a UTF-8 CSV file, honouring the same `type`, `accountId`, `from` and `to`
- * filters as the history page.
+ * a UTF-8 CSV file, honouring the same `type`, `accountId`, `from`, `to` and
+ * `q` (note search) filters as the history page.
  *
  * Security model:
  * - The owner is taken exclusively from the verified session via
@@ -40,6 +40,7 @@ export async function GET(request: Request): Promise<Response> {
     accountId: query.accountId,
     from: query.from,
     to: query.to,
+    search: query.search,
   };
 
   const items = await listTransactionHistoryForExport(userId, filters);

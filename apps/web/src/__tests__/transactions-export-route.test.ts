@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
         accountId: string | null;
         from: string | null;
         to: string | null;
+        search: string | null;
       },
     ) => Promise<TransactionHistoryItem[]>
   >(),
@@ -103,7 +104,7 @@ describe("GET /transactions/export", () => {
   it("scopes the export to the session user and forwards normalized filters", async () => {
     await GET(
       exportRequest(
-        `?type=expense&accountId=${ACCOUNT_ID}&from=2026-01-01&to=2026-12-31`,
+        `?type=expense&accountId=${ACCOUNT_ID}&from=2026-01-01&to=2026-12-31&q=خرید`,
       ),
     );
 
@@ -113,6 +114,19 @@ describe("GET /transactions/export", () => {
       accountId: ACCOUNT_ID,
       from: "2026-01-01",
       to: "2026-12-31",
+      search: "خرید",
+    });
+  });
+
+  it("trims the search term and drops a whitespace-only one", async () => {
+    await GET(exportRequest("?q=%20%20خرید%20%20"));
+
+    expect(h.listTransactionHistoryForExport).toHaveBeenCalledWith(OWNER, {
+      type: null,
+      accountId: null,
+      from: null,
+      to: null,
+      search: "خرید",
     });
   });
 
@@ -135,6 +149,7 @@ describe("GET /transactions/export", () => {
       accountId: null,
       from: null,
       to: null,
+      search: null,
     });
   });
 

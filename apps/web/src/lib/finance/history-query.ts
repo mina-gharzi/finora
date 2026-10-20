@@ -17,6 +17,13 @@ export const TRANSACTION_HISTORY_PAGE_SIZE = 20;
 /** Upper bound on the page number, so a crafted offset cannot walk arbitrarily far. */
 export const MAX_TRANSACTION_HISTORY_PAGE = 10_000;
 
+/**
+ * Upper bound on the free-text search term. Notes themselves cap at 500
+ * characters (see `transactionInputSchema`); a shorter bound keeps hostile
+ * LIKE patterns cheap and is safely normalized (not applied) above it.
+ */
+export const TRANSACTION_SEARCH_MAX_LENGTH = 200;
+
 export interface TransactionHistoryFilters {
   type: TransactionType | null;
   accountId: string | null;
@@ -24,6 +31,8 @@ export interface TransactionHistoryFilters {
   from: string | null;
   /** Inclusive Gregorian upper bound, `YYYY-MM-DD`. */
   to: string | null;
+  /** Free-text term matched against the transaction note (trimmed, or null). */
+  search: string | null;
 }
 
 export interface TransactionHistoryQuery extends TransactionHistoryFilters {
@@ -50,6 +59,13 @@ const historyQuerySchema = z.object({
   accountId: z.uuid().nullable().catch(null),
   from: isoDateSchema.nullable().catch(null),
   to: isoDateSchema.nullable().catch(null),
+  search: z
+    .string()
+    .trim()
+    .max(TRANSACTION_SEARCH_MAX_LENGTH)
+    .transform((value) => (value === "" ? null : value))
+    .nullable()
+    .catch(null),
   page: z.coerce
     .number()
     .int()
@@ -67,6 +83,7 @@ export function parseTransactionHistoryQuery(
     accountId: firstValue(params.accountId),
     from: firstValue(params.from),
     to: firstValue(params.to),
+    search: firstValue(params.q),
     page: firstValue(params.page),
   });
 
@@ -74,14 +91,39 @@ export function parseTransactionHistoryQuery(
     return parsed.data;
   }
 
-  return { type: null, accountId: null, from: null, to: null, page: 1 };
+  return {
+    type: null,
+    accountId: null,
+    from: null,
+    to: null,
+    search: null,
+    page: 1,
+  };
 }
 
 /** True when any narrowing filter is applied (used to pick the empty state). */
 export function hasActiveTransactionFilters(
   query: TransactionHistoryFilters,
 ): boolean {
-  return Boolean(query.type || query.accountId || query.from || query.to);
+  return Boolean(
+    query.type || query.accountId || query.from || query.to || query.search,
+  );
+}
+
+/**
+ * Wraps a search term in a Postgres `ILIKE` pattern with `%`, `_` and `\`
+ * escaped, so the term is matched literally as a substring. The pattern is
+ * passed as a bound parameter by the DAL — never interpolated into SQL.
+ *
+ * Case semantics: `ILIKE` folds ASCII case only; Persian text has no case, so
+ * matching is an exact substring for Persian and case-insensitive for ASCII.
+ */
+export function toIlikePattern(search: string): string {
+  const escaped = search
+    .replace(/\\/g, "\\\\")
+    .replace(/%/g, "\\%")
+    .replace(/_/g, "\\_");
+  return `%${escaped}%`;
 }
 
 /** Builds a `/transactions` link preserving the current filters and page. */
@@ -94,6 +136,7 @@ export function buildTransactionHistoryHref(
   if (query.accountId) search.set("accountId", query.accountId);
   if (query.from) search.set("from", query.from);
   if (query.to) search.set("to", query.to);
+  if (query.search) search.set("q", query.search);
   if (page > 1) search.set("page", String(page));
 
   const queryString = search.toString();
@@ -113,6 +156,7 @@ export function buildTransactionExportHref(
   if (query.accountId) search.set("accountId", query.accountId);
   if (query.from) search.set("from", query.from);
   if (query.to) search.set("to", query.to);
+  if (query.search) search.set("q", query.search);
 
   const queryString = search.toString();
   return queryString ? `/transactions/export?${queryString}` : "/transactions/export";

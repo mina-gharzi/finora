@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, lte } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   accounts,
@@ -13,6 +13,7 @@ import { findCategoryForUser } from "./categories";
 import { transactionIdSchema, transactionInputSchema } from "./validation";
 import {
   TRANSACTION_HISTORY_PAGE_SIZE,
+  toIlikePattern,
   type TransactionHistoryFilters,
   type TransactionHistoryQuery,
 } from "./history-query";
@@ -264,6 +265,12 @@ function buildHistoryConditions(
   }
   if (filters.from) conditions.push(gte(transactions.occurredOn, filters.from));
   if (filters.to) conditions.push(lte(transactions.occurredOn, filters.to));
+  if (filters.search) {
+    // Bound ILIKE parameter with wildcards escaped (see `toIlikePattern`),
+    // so the term matches the note literally — `%` and `_` in user input
+    // are never treated as wildcards.
+    conditions.push(ilike(transactions.note, toIlikePattern(filters.search)));
+  }
   return conditions;
 }
 

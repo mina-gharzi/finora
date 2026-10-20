@@ -425,6 +425,7 @@ describe("listTransactionHistory", () => {
     accountId: null,
     from: null,
     to: null,
+    search: null,
     page: 1,
   };
 
@@ -522,6 +523,67 @@ describe("listTransactionHistory", () => {
     expect(params).toContain("2026-12-31");
   });
 
+  it("searches the note with a bound ILIKE pattern", async () => {
+    h.state.selectQueue = [[]];
+
+    await listTransactionHistory(OWNER, { ...baseQuery, search: "خرید" });
+
+    const { sql, params } = new PgDialect().sqlToQuery(lastWhere() as never);
+    expect(sql).toContain("note");
+    expect(sql).toContain("ilike");
+    expect(params).toContain("%خرید%");
+  });
+
+  it("escapes LIKE wildcards so % and _ match literally", async () => {
+    h.state.selectQueue = [[]];
+
+    await listTransactionHistory(OWNER, { ...baseQuery, search: "50%_off" });
+
+    const { params } = new PgDialect().sqlToQuery(lastWhere() as never);
+    expect(params).toContain("%50\\%\\_off%");
+  });
+
+  it("keeps the owner scope when a search is active", async () => {
+    h.state.selectQueue = [[]];
+
+    await listTransactionHistory(OWNER, { ...baseQuery, search: "خرید" });
+
+    const { sql, params } = new PgDialect().sqlToQuery(lastWhere() as never);
+    expect(sql).toContain("user_id");
+    expect(params).toContain(OWNER);
+    expect(params).toContain("%خرید%");
+  });
+
+  it("composes the search with the other filters", async () => {
+    h.state.selectQueue = [[]];
+
+    await listTransactionHistory(OWNER, {
+      ...baseQuery,
+      type: "expense",
+      accountId: ACCOUNT_ID,
+      search: "خرید",
+    });
+
+    const { sql, params } = new PgDialect().sqlToQuery(lastWhere() as never);
+    expect(sql).toContain("user_id");
+    expect(sql).toContain("type");
+    expect(sql).toContain("account_id");
+    expect(sql).toContain("note");
+    expect(params).toContain(OWNER);
+    expect(params).toContain("expense");
+    expect(params).toContain(ACCOUNT_ID);
+    expect(params).toContain("%خرید%");
+  });
+
+  it("adds no note condition when there is no search", async () => {
+    h.state.selectQueue = [[]];
+
+    await listTransactionHistory(OWNER, baseQuery);
+
+    const { sql } = new PgDialect().sqlToQuery(lastWhere() as never);
+    expect(sql).not.toContain("note");
+  });
+
   it("normalizes a page below one to the first page", async () => {
     h.state.selectQueue = [[]];
 
@@ -548,6 +610,7 @@ describe("listTransactionHistoryForExport", () => {
     accountId: null,
     from: null,
     to: null,
+    search: null,
   };
 
   function historyRow(overrides: Record<string, unknown> = {}) {
@@ -599,6 +662,7 @@ describe("listTransactionHistoryForExport", () => {
       accountId: ACCOUNT_ID,
       from: "2026-01-01",
       to: "2026-12-31",
+      search: null,
     });
 
     const { sql, params } = new PgDialect().sqlToQuery(lastWhere() as never);
@@ -623,6 +687,24 @@ describe("listTransactionHistoryForExport", () => {
     expect(clauses).toHaveLength(2);
     expect(dialect.sqlToQuery(clauses[0] as never).sql).toContain("occurred_on");
     expect(dialect.sqlToQuery(clauses[1] as never).sql).toContain("created_at");
+  });
+
+  it("applies the same note search without any pagination cap", async () => {
+    h.state.selectQueue = [[]];
+
+    await listTransactionHistoryForExport(OWNER, {
+      ...baseFilters,
+      search: "خرید",
+    });
+
+    const { sql, params } = new PgDialect().sqlToQuery(lastWhere() as never);
+    expect(sql).toContain("user_id");
+    expect(sql).toContain("note");
+    expect(sql).toContain("ilike");
+    expect(params).toContain(OWNER);
+    expect(params).toContain("%خرید%");
+    expect(h.state.limitArgs).toEqual([]);
+    expect(h.state.offsetArgs).toEqual([]);
   });
 
   it("maps joined rows and preserves a null category name", async () => {

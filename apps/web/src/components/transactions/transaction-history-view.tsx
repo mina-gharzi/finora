@@ -46,6 +46,8 @@ export interface TransactionHistoryFiltersView {
   accountId: string;
   from: string;
   to: string;
+  /** Free-text term matched against transaction notes ("" = no search). */
+  search: string;
 }
 
 export interface TransactionHistoryViewProps {
@@ -172,6 +174,19 @@ export function TransactionHistoryView({
               />
             </Field>
 
+            <div className="sm:col-span-2 lg:col-span-4">
+              <Field>
+                <Label htmlFor="filter-search">جستجو در توضیحات</Label>
+                <Input
+                  id="filter-search"
+                  name="q"
+                  type="search"
+                  defaultValue={filters.search}
+                  placeholder="مثلاً خرید ناهار"
+                />
+              </Field>
+            </div>
+
             <div className="flex items-center gap-3 sm:col-span-2 lg:col-span-4">
               <Button type="submit">اعمال فیلتر</Button>
               {hasActiveFilters && (
@@ -196,6 +211,17 @@ export function TransactionHistoryView({
                 className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
               >
                 افزودن تراکنش
+              </Link>
+            }
+          />
+        ) : filters.search ? (
+          <EmptyState
+            icon={<TransactionsIcon width={24} height={24} />}
+            title="تراکنشی مطابق جستجو یافت نشد"
+            description="هیچ تراکنشی با این عبارت در یادداشت‌ها پیدا نشد. عبارت را تغییر دهید یا جستجو را پاک کنید."
+            action={
+              <Link href="/transactions" className={PAGINATION_LINK}>
+                نمایش همه تراکنش‌ها
               </Link>
             }
           />

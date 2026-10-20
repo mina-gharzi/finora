@@ -55,6 +55,7 @@ async function AuthenticatedTransactionHistory({
         accountId: query.accountId ?? "",
         from: query.from ?? "",
         to: query.to ?? "",
+        search: query.search ?? "",
       }}
       page={history.page}
       prevHref={
