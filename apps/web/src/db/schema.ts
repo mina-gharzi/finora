@@ -207,6 +207,57 @@ export type TransactionRow = typeof transactions.$inferSelect;
 export type NewTransactionRow = typeof transactions.$inferInsert;
 
 /**
+ * Monthly spending budgets, one per expense category per Jalali/calendar month.
+ *
+ * A budget sets a positive integer Toman limit for an owner's expense category
+ * over one month. `month_start` is the normalized first calendar day of that
+ * month (`YYYY-MM-DD`, a `date` column with no time zone), so a month is
+ * identified by its Gregorian lower bound — the same convention the dashboard,
+ * reports and transaction history use for inclusive calendar-day ranges.
+ *
+ * The `(user_id, category_id, month_start)` unique constraint is the source of
+ * truth for "at most one budget per category per month"; it lets the data layer
+ * treat concurrent duplicate submissions as a conflict rather than creating
+ * two rows. The category FK cascades on delete, so a removed category never
+ * leaves a dangling budget behind.
+ *
+ * `limit_amount` is stored as bigint and constrained to be positive: a budget of
+ * zero (or a negative limit) is meaningless and rejected at the database level
+ * in addition to the validation layer.
+ */
+export const budgets = pgTable(
+  "budgets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: ownerUserId(),
+    categoryId: uuid("category_id")
+      .notNull()
+      .references(() => categories.id, { onDelete: "cascade" }),
+    monthStart: date("month_start", { mode: "string" }).notNull(),
+    limitAmount: bigint("limit_amount", { mode: "number" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check("budgets_limit_amount_check", sql`${table.limitAmount} > 0`),
+    uniqueIndex("budgets_user_category_month_idx").on(
+      table.userId,
+      table.categoryId,
+      table.monthStart,
+    ),
+    index("budgets_user_id_month_idx").on(table.userId, table.monthStart),
+    index("budgets_category_id_idx").on(table.categoryId),
+  ],
+);
+
+export type BudgetRow = typeof budgets.$inferSelect;
+export type NewBudgetRow = typeof budgets.$inferInsert;
+
+/**
  * Persistent fixed-window rate-limit counters, shared across application
  * instances that use the same database.
  *

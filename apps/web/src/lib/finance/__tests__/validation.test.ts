@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   accountInputSchema,
+  budgetInputSchema,
   categoryInputSchema,
   categoryNameInputSchema,
   isoDateSchema,
@@ -124,5 +125,45 @@ describe("categoryNameInputSchema", () => {
       expect("kind" in r.data).toBe(false);
       expect("userId" in r.data).toBe(false);
     }
+  });
+});
+
+describe("budgetInputSchema", () => {
+  const validBudget = {
+    categoryId: uuid,
+    monthStart: "2026-10-16",
+    limitAmount: 1200000,
+  };
+
+  it("accepts a valid budget", () => {
+    const r = budgetInputSchema.safeParse(validBudget);
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.limitAmount).toBe(1200000);
+  });
+
+  it("parses Persian-digit limit text", () => {
+    const r = budgetInputSchema.safeParse({ ...validBudget, limitAmount: "۱٬۲۰۰٬۰۰۰" });
+    expect(r.success && r.data.limitAmount).toBe(1200000);
+  });
+
+  it.each([0, -1, 1.5, "0", "abc", Number.MAX_SAFE_INTEGER + 1, NaN])(
+    "rejects a non-positive or non-integer limit %j",
+    (limitAmount) =>
+      expect(budgetInputSchema.safeParse({ ...validBudget, limitAmount }).success).toBe(false),
+  );
+
+  it("rejects a non-uuid category id", () => {
+    expect(budgetInputSchema.safeParse({ ...validBudget, categoryId: "1" }).success).toBe(false);
+  });
+
+  it("rejects a malformed month start", () => {
+    expect(budgetInputSchema.safeParse({ ...validBudget, monthStart: "2026-13-01" }).success).toBe(false);
+    expect(budgetInputSchema.safeParse({ ...validBudget, monthStart: "2026/10/16" }).success).toBe(false);
+  });
+
+  it("strips a forged userId so ownership cannot be client-supplied", () => {
+    const r = budgetInputSchema.safeParse({ ...validBudget, userId: "attacker" });
+    expect(r.success).toBe(true);
+    if (r.success) expect("userId" in r.data).toBe(false);
   });
 });

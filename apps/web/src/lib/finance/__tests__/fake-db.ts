@@ -16,6 +16,18 @@ export interface FakeDbState {
   insertCalls: number;
   updateCalls: number;
   deleteCalls: number;
+  /**
+   * When set, the next `insert(...).returning()` (and awaiting the insert chain)
+   * rejects with this value instead of resolving — used to exercise error
+   * handling such as a Postgres unique-constraint violation. It is cleared after
+   * firing so it affects exactly one insert.
+   */
+  insertError?: unknown;
+  /**
+   * When set, the next `update(...).returning()` rejects with this value instead
+   * of resolving. Cleared after firing so it affects exactly one update.
+   */
+  updateError?: unknown;
   /** Conditions passed to `.where(...)`, in call order (for scope assertions). */
   whereConditions: unknown[];
   /** Lock strengths passed to `.for(...)`, in call order (optional recorder). */
@@ -43,7 +55,15 @@ interface Chain extends PromiseLike<unknown[]> {
   returning: () => Promise<unknown[]>;
 }
 
-function makeChain(resolveTo: unknown[], state: FakeDbState): Chain {
+function makeChain(
+  resolveTo: unknown[],
+  state: FakeDbState,
+  rejectWith?: unknown,
+): Chain {
+  const outcome = (): Promise<unknown[]> =>
+    rejectWith === undefined
+      ? Promise.resolve(resolveTo)
+      : Promise.reject(rejectWith);
   const chain: Chain = {
     from: () => chain,
     where: (condition) => {
@@ -77,9 +97,8 @@ function makeChain(resolveTo: unknown[], state: FakeDbState): Chain {
       state.updatedValues.push(value);
       return chain;
     },
-    returning: () => Promise.resolve(resolveTo),
-    then: (onFulfilled, onRejected) =>
-      Promise.resolve(resolveTo).then(onFulfilled, onRejected),
+    returning: () => outcome(),
+    then: (onFulfilled, onRejected) => outcome().then(onFulfilled, onRejected),
   };
   return chain;
 }
@@ -89,11 +108,15 @@ export function createFakeDb(state: FakeDbState) {
     select: () => makeChain(state.selectQueue.shift() ?? [], state),
     insert: () => {
       state.insertCalls += 1;
-      return makeChain(state.insertResult, state);
+      const error = state.insertError;
+      state.insertError = undefined;
+      return makeChain(state.insertResult, state, error);
     },
     update: () => {
       state.updateCalls += 1;
-      return makeChain(state.updateResult, state);
+      const error = state.updateError;
+      state.updateError = undefined;
+      return makeChain(state.updateResult, state, error);
     },
     delete: () => {
       state.deleteCalls += 1;

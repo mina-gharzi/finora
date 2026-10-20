@@ -52,14 +52,14 @@ describe("AppShell", () => {
     expect(screen.getByText("نسخه 0.1.0")).toBeTruthy();
   });
 
-  it("marks the current destination and keeps placeholders non-navigable", () => {
+  it("marks the current destination and links every destination", () => {
     render(<AppShell>content</AppShell>);
 
     const aside = sidebar();
     expect(aside).not.toBeNull();
     if (!aside) return;
 
-    expect(aside.querySelectorAll("a")).toHaveLength(6);
+    expect(aside.querySelectorAll("a")).toHaveLength(7);
 
     const current = screen.getByRole("link", { name: "داشبورد" });
     expect(current.getAttribute("aria-current")).toBe("page");
@@ -74,18 +74,19 @@ describe("AppShell", () => {
     const categories = screen.getByRole("link", { name: "دسته‌بندی‌ها" });
     expect(categories.getAttribute("href")).toBe("/categories");
 
+    const budgets = screen.getByRole("link", { name: "بودجه‌ها" });
+    expect(budgets.getAttribute("href")).toBe("/budgets");
+
     const reports = screen.getByRole("link", { name: "گزارش‌ها" });
     expect(reports.getAttribute("href")).toBe("/reports");
 
     const settings = screen.getByRole("link", { name: "تنظیمات" });
     expect(settings.getAttribute("href")).toBe("/settings");
 
-    // Only budgets remains a disabled placeholder.
-    expect(
-      aside.querySelectorAll('[aria-disabled="true"]'),
-    ).toHaveLength(1);
+    // Every destination is now navigable; no disabled placeholder remains.
+    expect(aside.querySelectorAll('[aria-disabled="true"]')).toHaveLength(0);
     expect(aside.querySelectorAll("li")).toHaveLength(7);
-    expect(aside.textContent).toContain("به‌زودی");
+    expect(aside.textContent).not.toContain("به‌زودی");
   });
 
   it("keeps a destination active on its nested routes", () => {
@@ -99,15 +100,13 @@ describe("AppShell", () => {
     expect(dashboard.getAttribute("aria-current")).toBeNull();
   });
 
-  it("never renders a disabled placeholder as a link", () => {
+  it("renders no disabled placeholders now that every destination exists", () => {
     render(<AppShell>content</AppShell>);
 
     const aside = sidebar();
     if (!aside) return;
 
-    for (const placeholder of aside.querySelectorAll('[aria-disabled="true"]')) {
-      expect(placeholder.tagName).toBe("SPAN");
-    }
+    expect(aside.querySelectorAll('[aria-disabled="true"]')).toHaveLength(0);
   });
 
   it("opens and closes the mobile navigation panel", () => {

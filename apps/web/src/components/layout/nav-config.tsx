@@ -20,9 +20,8 @@ export interface NavEntry {
 /**
  * Navigation for the application shell.
  *
- * Dashboard, transactions, accounts, categories, reports and settings are real
- * destinations. Budgets is intentionally a disabled placeholder so the shell is
- * demonstrated without implying that the financial feature already exists.
+ * Dashboard, transactions, accounts, categories, budgets, reports and settings
+ * are real destinations. Budgets is enabled once its feature exists.
  */
 export const navGroups: { title: string; items: NavEntry[] }[] = [
   {
@@ -57,7 +56,7 @@ export const navGroups: { title: string; items: NavEntry[] }[] = [
         href: "/categories",
         icon: <CategoryIcon />,
       },
-      { key: "budgets", label: "بودجه‌ها", icon: <BudgetIcon />, disabled: true },
+      { key: "budgets", label: "بودجه‌ها", href: "/budgets", icon: <BudgetIcon /> },
       {
         key: "reports",
         label: "گزارش‌ها",

@@ -90,3 +90,20 @@ export const transactionInputSchema = z.object({
     .max(500, { error: "یادداشت بیش از حد طولانی است." })
     .default(""),
 });
+
+/**
+ * Creating a monthly budget. The owner id is never part of the input (unknown
+ * keys are stripped) and the category must be an owner-scoped expense category,
+ * which requires the database and is enforced in the data-access layer.
+ *
+ * `monthStart` is validated as a real calendar day (`YYYY-MM-DD`); the data
+ * layer additionally normalizes it to the first day of its month so a budget is
+ * uniquely identified by the month rather than an arbitrary day inside it.
+ * `limitAmount` reuses the Toman rules (a non-negative safe integer) and is
+ * tightened to be strictly positive.
+ */
+export const budgetInputSchema = z.object({
+  categoryId: idSchema,
+  monthStart: isoDateSchema,
+  limitAmount: positiveTomanSchema,
+});
