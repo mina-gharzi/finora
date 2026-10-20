@@ -29,6 +29,78 @@ pnpm test        # unit tests, then the Playwright suite
 or lint script. Unit tests never open a database connection — the DAL tests
 mock `@/db`, so no container or `.env` file is needed for `pnpm test:unit`.
 
+## Health check
+
+`GET /api/health` is a lightweight, unauthenticated operational probe. It runs
+a single `SELECT 1` through the existing lazy Drizzle connection and returns a
+minimal JSON body. It never touches application tables, needs no session, and
+exposes no user data or environment configuration.
+
+| Status | Body                          | Meaning                                                                 |
+| ------ | ----------------------------- | ----------------------------------------------------------------------- |
+| `200`  | `{"status":"ok"}`             | The process is serving requests **and** the database round-trip succeeded (readiness). |
+| `503`  | `{"status":"unavailable"}`    | The database check failed; the instance cannot serve data-dependent requests. |
+
+Responses set `Cache-Control: no-store, max-age=0` so a health verdict is never
+cached. On failure, the reason (driver message, SQL, connection string, stack)
+stays server-side — only a structured error event is logged (see below). There
+is intentionally no separate liveness endpoint: every meaningful request needs
+the database, so one combined readiness probe is enough.
+
+Verify locally, with the dev server running (`pnpm --filter @finora/web dev`):
+
+```sh
+curl -i http://127.0.0.1:3000/api/health        # 200 {"status":"ok"} with a healthy DB
+```
+
+## Structured logging
+
+Server-side operational logging goes through one utility,
+`apps/web/src/lib/logger.ts` (no third-party dependency — records are written
+to `console`). Each call emits a single-line JSON object with a stable shape:
+
+```json
+{"timestamp":"2026-10-20T12:34:56.789Z","level":"error","event":"health.database.unavailable","requestId":"a1b2…"}
+```
+
+- `timestamp` — ISO-8601 UTC.
+- `level` — `debug` | `info` | `warn` | `error`.
+- `event` — a stable, dot-separated code (e.g. `email.delivery.failed`,
+  `auth.verification.initial_email_failed`). **Use it to alert and grep**;
+  field names and message text are not stable contracts.
+- `requestId` — present when a correlation id is available. Incoming
+  `x-request-id` is honoured when well-formed; otherwise a fresh id is
+  generated (`src/lib/request-id.ts`).
+- additional keys — a small, explicitly chosen metadata bag.
+
+Levels are filtered by `LOG_LEVEL` (default `debug` in development, `info` in
+production); see `apps/web/.env.example`.
+
+**Fields intentionally excluded from logs.** Callers pass an event name and
+chosen metadata — never whole request objects, headers, cookies, database rows
+or exceptions. The logger additionally drops any key whose name contains
+`password`, `secret`, `token`, `cookie`, `authorization`, `session`, `jwt`,
+`apiKey`, `credential`, etc., and scrubs string values for URL query strings,
+JWTs, `Bearer`/`Basic` credentials, email addresses and long opaque tokens.
+`Error` values are reduced to `{ name, code?, message? }` (message scrubbed);
+**stack traces and `cause` chains are never logged**. As a result none of the
+following ever reach a log line: passwords or password hashes, session cookies,
+authorization headers, JWTs or raw tokens, password-reset/verification links
+or their token values, API keys or database credentials, full request bodies,
+or financial records and transaction descriptions.
+
+Current integration points (deliberately few, to avoid duplicate logging):
+
+- `health.database.unavailable` — the health probe's database check failed.
+- `email.delivery.failed` — a configured email provider failed mid-send
+  (includes the sanitized provider code; never the recipient or key).
+- `auth.verification.initial_email_undelivered` / `_failed` — best-effort
+  registration verification email could not be sent (registration still
+  succeeds; the in-app resend is the retry path).
+
+Expected validation failures (bad form input, wrong password, expired token)
+are **not** logged as server errors — they are normal, user-facing outcomes.
+
 ## Email delivery (Resend)
 
 Email verification and password recovery are delivered through

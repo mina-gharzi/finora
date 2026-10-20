@@ -301,7 +301,7 @@ describe("provider failures stay safe", () => {
     expect(logged).not.toContain("user@example.com");
   });
 
-  it("redacts token links and addresses from unexpected error details", async () => {
+  it("scrubs token links and addresses from unexpected error details", async () => {
     stubEnv("NODE_ENV", "test");
     stubEnv("EMAIL_OUTBOX_DIR", undefined);
     vi.spyOn(resolveEmailAdapter(), "send").mockRejectedValue(
@@ -319,9 +319,13 @@ describe("provider failures stay safe", () => {
 
     expect(outcome).toBe("unavailable");
     const logged = errorSpy.mock.calls.flat().map(String).join(" ");
-    expect(logged).toContain("[redacted]");
+    // The structured event name survives for operators...
+    expect(logged).toContain("email.delivery.failed");
+    // ...the recipient is masked...
     expect(logged).toContain("[redacted-email]");
+    // ...and neither the live token nor the raw query string leaks.
     expect(logged).not.toContain("live-token-abc");
+    expect(logged).not.toContain("token=live-token-abc");
     expect(logged).not.toContain("admin@example.com");
   });
 });

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
   MIN_SESSION_SECRET_LENGTH,
+  PUBLIC_API_ROUTES,
   PUBLIC_ROUTES,
   SESSION_COOKIE_NAME,
   TOKEN_ROUTES,
@@ -24,6 +25,11 @@ export async function proxy(request: NextRequest) {
   // Token pages (verification, password reset) are reachable whether or not
   // a session exists: the emailed link may be opened in any browser.
   if ((TOKEN_ROUTES as readonly string[]).includes(pathname)) {
+    return NextResponse.next();
+  }
+  // Unauthenticated operational endpoints (e.g. the health probe) bypass the
+  // login redirect entirely; they expose no user data.
+  if ((PUBLIC_API_ROUTES as readonly string[]).includes(pathname)) {
     return NextResponse.next();
   }
   const isPublicRoute = (PUBLIC_ROUTES as readonly string[]).includes(pathname);

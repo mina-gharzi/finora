@@ -121,6 +121,19 @@ describe("proxy route guard", () => {
     }
   });
 
+  it("lets anonymous visitors reach the health endpoint", async () => {
+    const response = await run("/api/health");
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("keeps a signed-in visitor on the health endpoint (no auth-page bounce)", async () => {
+    const token = await signSessionToken("user-1", STRONG_SECRET);
+    const response = await run("/api/health", await cookieHeader(token));
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.get("location")).toBeNull();
+  });
+
   it("treats a token signed with a different secret as unauthenticated", async () => {
     const token = await signSessionToken(
       "user-1",

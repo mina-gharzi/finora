@@ -26,6 +26,7 @@ import {
   sendVerificationEmail,
 } from "@/lib/email/adapter";
 import { isEmailVerified, requireUserId } from "@/lib/dal";
+import { createLogger } from "@/lib/logger";
 import { hashPassword } from "@/lib/password";
 import { tooManyAttemptsMessage } from "@/lib/rate-limit";
 import { deleteSession } from "@/lib/session";
@@ -36,6 +37,13 @@ import {
   toFieldErrors,
   verifyEmailSchema,
 } from "@/lib/validation";
+
+/**
+ * Background email work (initial verification resend) has no request context
+ * worth threading, so a module-level logger is used. Events use stable names
+ * and never carry the recipient, the token or the raw error message.
+ */
+const log = createLogger();
 
 /**
  * Account-recovery server actions.
@@ -243,15 +251,11 @@ export async function sendInitialVerificationEmail(input: {
     });
     if (outcome === "unavailable") {
       await discardAuthToken(input.userId, "email_verify");
-      console.error(
-        "[finora] initial verification email could not be delivered; " +
-          "the in-app resend action is the retry path.",
-      );
+      log.warn("auth.verification.initial_email_undelivered", {
+        hint: "in-app resend is the retry path",
+      });
     }
   } catch (error) {
-    console.error(
-      "[finora] initial verification email failed:",
-      error instanceof Error ? error.message : "unknown error",
-    );
+    log.error("auth.verification.initial_email_failed", { error });
   }
 }

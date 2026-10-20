@@ -31,3 +31,11 @@ export const TOKEN_ROUTES = [
   "/reset-password",
   "/change-email",
 ] as const;
+
+/**
+ * API routes reachable without a session, exempt from the proxy's login
+ * redirect. The health probe must not require authentication (orchestrators
+ * call it anonymously) and exposes no user data. Authentication and ownership
+ * checks still apply to every other API route.
+ */
+export const PUBLIC_API_ROUTES = ["/api/health"] as const;

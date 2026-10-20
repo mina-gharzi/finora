@@ -2,6 +2,7 @@ import "server-only";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getAppUrl, isProduction } from "@/lib/env";
+import { createLogger } from "@/lib/logger";
 import {
   buildEmailChangeEmail,
   buildPasswordResetEmail,
@@ -235,15 +236,14 @@ export function isEmailDeliveryAvailable(): boolean {
 }
 
 /**
- * Removes live token query values and email addresses from a detail string
- * before it reaches the server log, so no log line can ever carry a usable
- * recovery link or a recipient — even if an underlying error echoes them.
+ * Structured logger for the email boundary. A module-level logger is correct
+ * here: delivery is fire-and-forget from a server action that may not carry a
+ * request id, and the event name plus adapter name are enough context. The
+ * logger scrubs emails, tokens and URL query strings from any value, so the
+ * raw provider message can never leak a recovery link even if an adapter
+ * echoes one.
  */
-function redactSensitive(detail: string): string {
-  return detail
-    .replace(/([?&]token=)[^&\s"']+/gi, "$1[redacted]")
-    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[redacted-email]");
-}
+const emailLogger = createLogger();
 
 async function sendOrClassify(
   message: OutboundEmail,
@@ -256,15 +256,14 @@ async function sendOrClassify(
       return "unavailable";
     }
     // A configured adapter that fails mid-flight (connection refused, API
-    // error, ...) is still an outage of the same user-visible kind. Never
-    // let the raw error — or the recipient — escape to the client, and
-    // redact token links / addresses before the detail reaches the log.
-    console.error(
-      `[finora] email delivery failed via ${resolveEmailAdapter().name}:`,
-      redactSensitive(
-        error instanceof Error ? error.message : "unknown error",
-      ),
-    );
+    // error, ...) is still an outage of the same user-visible kind. Never let
+    // the raw error — or the recipient — escape to the client. The logger
+    // reduces the error to its name/code (with the message scrubbed) and drops
+    // blocked keys, so token links and addresses never reach the log line.
+    emailLogger.error("email.delivery.failed", {
+      adapter: resolveEmailAdapter().name,
+      error,
+    });
     return "unavailable";
   }
 }
