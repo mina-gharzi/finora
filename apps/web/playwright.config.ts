@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { defineConfig, devices } from "@playwright/test";
+import { serverEnvWithEmailDeliveryDisabled } from "./e2e/email-guard";
 
 // The Next server loads .env itself, but the Playwright runner (and its
 // workers, which inherit process.env) needs the same values for tests that
@@ -42,7 +43,17 @@ export default defineConfig({
   webServer: {
     command: "pnpm start",
     url: "http://127.0.0.1:3000",
+    // The suite can only rely on the protective `env` below when Playwright
+    // SPAWNS the server itself. If a server is already listening on port 3000
+    // (e.g. a leftover `next dev` or `pnpm start`), Playwright reuses it
+    // untouched and that process keeps whatever environment it was started
+    // with — including a real RESEND_API_KEY. Always stop any locally running
+    // server on port 3000 before `pnpm test:e2e`.
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    // Force email delivery OFF for the spawned server, regardless of local
+    // configuration (real keys, ambient env, or the EMAIL_PROVIDER=resend
+    // dev opt-in) — see e2e/email-guard.ts for the mechanism and caveats.
+    env: serverEnvWithEmailDeliveryDisabled(),
   },
 });

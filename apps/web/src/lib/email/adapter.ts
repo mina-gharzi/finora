@@ -11,32 +11,71 @@ import {
 /**
  * Email delivery boundary.
  *
- * No transactional-email provider is integrated with this project yet, so the
- * application ships three explicitly distinct behaviours instead of pretending
- * mail works:
+ * The adapter is chosen strictly by environment:
  *
- * 1. Development / test — `EMAIL_OUTBOX_DIR` set: each message is written as a
+ * 1. Production with BOTH `RESEND_API_KEY` and `EMAIL_FROM` set: messages are
+ *    sent through Resend (official SDK, imported lazily). This is the only
+ *    production adapter; the API key stays inside the adapter closure and is
+ *    never interpolated into messages, errors or logs.
+ * 2. Production without that configuration: every send fails with
+ *    `EmailDeliveryUnavailableError`, which callers map to a generic,
+ *    enumeration-safe "service unavailable" answer. There is deliberately NO
+ *    console or file-outbox fallback in production — both would turn server
+ *    logs or the filesystem into a token-disclosure surface.
+ * 3. Development / test — explicit opt-in: `EMAIL_PROVIDER=resend` with BOTH
+ *    Resend variables set: messages are sent through Resend so real delivery
+ *    can be exercised manually from local development (the credentials live
+ *    in `apps/web/.env.development.local`, which only `next dev` loads). The
+ *    flag is read ONLY in this non-production branch, so production selection
+ *    never depends on it; an unknown flag value or an incomplete Resend
+ *    configuration falls through to behaviours 4 and 5 unchanged.
+ * 4. Development / test — `EMAIL_OUTBOX_DIR` set: each message is written as a
  *    JSON file into that directory (a local "outbox"). This is a filesystem
  *    artefact for developers and test suites, NOT an HTTP endpoint, and the
  *    directory is gitignored.
- * 2. Development / test — no outbox directory: messages, including the raw
+ * 5. Development / test — no outbox directory: messages, including the raw
  *    token link, are logged to the server console. Explicitly development
  *    only; production never logs tokens.
- * 3. Production — no provider is wired: every send fails with
- *    `EmailDeliveryUnavailableError`. Callers map that to a generic,
- *    enumeration-safe "service unavailable" answer. Wiring a real provider
- *    means implementing `EmailAdapter` and selecting it here; production
- *    credentials/keys are not defined (and must not be invented) until then.
+ *
+ * Development sends real email ONLY after that explicit opt-in; with the flag
+ * absent — the default, and what the automated tests enforce — local runs log
+ * or file messages instead. Production is unaffected by the flag: real
+ * delivery there is decided solely by configuration.
  *
  * `isEmailDeliveryAvailable` lets request handlers pre-check delivery before
- * touching the database, so an unconfigured production deployment answers
- * identically for existing and unknown email addresses.
+ * touching the database, so an unconfigured deployment answers identically
+ * for existing and unknown email addresses. It reports configuration only —
+ * it does not guarantee that the provider accepts any individual send (an
+ * invalid key, an unverified sender domain or a provider outage still fail
+ * closed as the same generic answer at send time).
+ *
+ * Secrets: `RESEND_API_KEY` is read by this server-only module and never
+ * logged. Provider failures are reduced to short machine codes before they
+ * can reach a log line, and the shared failure log additionally redacts token
+ * query values and email addresses.
  */
 
 export class EmailDeliveryUnavailableError extends Error {
   constructor() {
     super("Email delivery is not configured for this environment.");
     this.name = "EmailDeliveryUnavailableError";
+  }
+}
+
+/**
+ * A configured provider attempt failed. Carries only a short, sanitized
+ * machine code derived from the failure (e.g. "rate_limit_exceeded") — never
+ * the provider's error message (which can echo request details such as the
+ * recipient), never anything from the message payload — so it is safe to log.
+ */
+export class EmailProviderError extends Error {
+  /** Sanitized failure code; safe for server logs. */
+  readonly code: string;
+
+  constructor(code: string) {
+    super(`email provider send failed (${code})`);
+    this.name = "EmailProviderError";
+    this.code = code;
   }
 }
 
@@ -80,7 +119,7 @@ const consoleAdapter: EmailAdapter = {
   },
 };
 
-/** Production adapter placeholder: fails loudly instead of dropping mail. */
+/** Production fallback when Resend is not configured: fails loudly instead of dropping mail. */
 const unconfiguredAdapter: EmailAdapter = {
   name: "unconfigured",
   async send() {
@@ -88,11 +127,91 @@ const unconfiguredAdapter: EmailAdapter = {
   },
 };
 
+/**
+ * Server-only Resend configuration, read lazily so importing this module
+ * never throws. BOTH values are required: partial configuration counts as
+ * unconfigured so a half-set-up deployment fails closed rather than sending
+ * from an unverified sender or with a missing key.
+ */
+function getResendConfig(): { apiKey: string; from: string } | null {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const from = process.env.EMAIL_FROM?.trim();
+  if (!apiKey || !from) return null;
+  return { apiKey, from };
+}
+
+/**
+ * Reduces any failure label to `[A-Za-z0-9_]` (capped at 40 characters), so
+ * nothing provider-supplied can ride along into a log line.
+ */
+function safeCode(label: string): string {
+  const code = label.replace(/[^A-Za-z0-9_]/g, "").slice(0, 40);
+  return code || "unknown";
+}
+
+/**
+ * Production adapter backed by Resend. Built only from a complete
+ * configuration (see `resolveEmailAdapter`). `apiKey` lives in this closure
+ * and is handed to the SDK constructor — it is never logged or echoed.
+ *
+ * Failure handling:
+ * - Resend reports API failures as `{ error: { name, statusCode, message } }`.
+ *   Only the stable machine `name` survives into an `EmailProviderError`; the
+ *   message may contain request details (e.g. the recipient) and is dropped.
+ * - Transport-level exceptions (DNS, TLS, timeouts) are likewise reduced to
+ *   the error class name — their messages can contain request details.
+ */
+function resendAdapter(config: { apiKey: string; from: string }): EmailAdapter {
+  return {
+    name: "resend",
+    async send(message) {
+      // Lazy: environments without this adapter (dev/test/unconfigured
+      // production) never load the SDK.
+      const { Resend } = await import("resend");
+      const resend = new Resend(config.apiKey);
+
+      let response: Awaited<ReturnType<typeof resend.emails.send>>;
+      try {
+        response = await resend.emails.send({
+          from: config.from,
+          to: message.to,
+          subject: message.subject,
+          html: message.html,
+          text: message.text,
+        });
+      } catch (error) {
+        throw new EmailProviderError(
+          safeCode(error instanceof Error ? error.name : "unknown"),
+        );
+      }
+
+      if (response.error) {
+        throw new EmailProviderError(safeCode(response.error.name));
+      }
+    },
+  };
+}
+
 export function resolveEmailAdapter(): EmailAdapter {
   if (isProduction()) {
-    // Never fall back to console/outbox in production: both would turn the
-    // server logs or filesystem into a token-disclosure surface.
+    const resend = getResendConfig();
+    if (resend) return resendAdapter(resend);
+    // Fail closed: never fall back to console/outbox in production — both
+    // would turn the server logs or filesystem into a token-disclosure
+    // surface. Callers map the typed error to the generic unavailable answer.
+    // EMAIL_PROVIDER is deliberately NOT read here: production selection is
+    // decided by configuration alone (configured Resend or unconfigured).
     return unconfiguredAdapter;
+  }
+  // Development-only opt-in for manual delivery testing. Reading the flag
+  // outside the production branch above is what keeps production structurally
+  // incapable of selecting a development adapter.
+  if (process.env.EMAIL_PROVIDER?.trim().toLowerCase() === "resend") {
+    const resend = getResendConfig();
+    if (resend) return resendAdapter(resend);
+    // Incomplete configuration: fall through to the development defaults so a
+    // half-set-up local environment keeps working (and visibly logs instead
+    // of silently dropping mail).
   }
   const outbox = process.env.EMAIL_OUTBOX_DIR?.trim();
   if (outbox) {
@@ -102,12 +221,27 @@ export function resolveEmailAdapter(): EmailAdapter {
 }
 
 /**
- * True when this environment can actually attempt delivery. Handlers must
- * check this BEFORE looking up an account so an unconfigured deployment
- * cannot be used to probe which addresses exist.
+ * True when an adapter is configured to ATTEMPT delivery for this
+ * environment. Handlers must check this BEFORE looking up an account, so an
+ * unconfigured deployment cannot be used to probe which addresses exist.
+ *
+ * This is a configuration check, not a delivery guarantee: the provider may
+ * still reject an individual send (invalid key, unverified sender domain,
+ * outage), and every such failure maps to the same generic unavailable answer.
  */
 export function isEmailDeliveryAvailable(): boolean {
   return resolveEmailAdapter().name !== "unconfigured";
+}
+
+/**
+ * Removes live token query values and email addresses from a detail string
+ * before it reaches the server log, so no log line can ever carry a usable
+ * recovery link or a recipient — even if an underlying error echoes them.
+ */
+function redactSensitive(detail: string): string {
+  return detail
+    .replace(/([?&]token=)[^&\s"']+/gi, "$1[redacted]")
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[redacted-email]");
 }
 
 async function sendOrClassify(
@@ -122,10 +256,13 @@ async function sendOrClassify(
     }
     // A configured adapter that fails mid-flight (connection refused, API
     // error, ...) is still an outage of the same user-visible kind. Never
-    // let the raw error — or the recipient — escape to the client.
+    // let the raw error — or the recipient — escape to the client, and
+    // redact token links / addresses before the detail reaches the log.
     console.error(
       `[finora] email delivery failed via ${resolveEmailAdapter().name}:`,
-      error instanceof Error ? error.message : "unknown error",
+      redactSensitive(
+        error instanceof Error ? error.message : "unknown error",
+      ),
     );
     return "unavailable";
   }

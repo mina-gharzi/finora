@@ -93,3 +93,41 @@ describe("production startup validation", () => {
     await expect(register()).resolves.toBeUndefined();
   });
 });
+
+describe("email delivery advisory", () => {
+  it("warns without failing when RESEND_API_KEY / EMAIL_FROM are unset", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("SESSION_SECRET", STRONG_SECRET);
+    vi.stubEnv("DATABASE_URL", DATABASE_URL);
+    vi.stubEnv("RESEND_API_KEY", "");
+    vi.stubEnv("EMAIL_FROM", "");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const register = await importRegister();
+    await expect(register()).resolves.toBeUndefined();
+
+    const logged = warn.mock.calls.flat().map(String).join(" ");
+    expect(logged).toContain("RESEND_API_KEY");
+    expect(logged).toContain("EMAIL_FROM");
+    // Names only — never a value (here: any stubbed secret or key material).
+    expect(logged).not.toContain(STRONG_SECRET);
+    expect(logged).not.toContain(DATABASE_URL);
+    warn.mockRestore();
+  });
+
+  it("stays silent when both email variables are configured", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("SESSION_SECRET", STRONG_SECRET);
+    vi.stubEnv("DATABASE_URL", DATABASE_URL);
+    vi.stubEnv("RESEND_API_KEY", "re_test_key_1234567890");
+    vi.stubEnv("EMAIL_FROM", "Finora <no-reply@example.com>");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const register = await importRegister();
+    await expect(register()).resolves.toBeUndefined();
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
