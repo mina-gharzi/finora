@@ -1,11 +1,29 @@
 /**
- * Minimal fixed-window rate limiter kept in process memory.
+ * Rate-limiting primitives.
  *
- * LIMITATION: state is local to one server process. It resets on restart and
- * is NOT shared between multiple instances. For multi-instance deployments a
- * shared store (e.g. the database or Redis) is required.
+ * Two implementations share one interface:
  *
- * Pure module (no Next.js imports) so it is trivially unit-testable.
+ *  - `createInMemoryRateLimiter` — a pure, process-local fixed-window limiter.
+ *    Fast and dependency-free, but state is per process: it resets on restart
+ *    and is NOT shared between instances. Suitable for tests and for
+ *    non-security-critical smoothing; NOT sufficient on its own for
+ *    multi-instance deployments.
+ *
+ *  - `createPersistentRateLimiter` (see `persistent-rate-limit.ts`) — the same
+ *    policy backed by the shared PostgreSQL store, so limits hold across every
+ *    application instance that uses the same database.
+ *
+ * Both are fixed-window: a key accumulates events until `windowMs` elapses from
+ * the first event, after which the window resets. Fixed-window is the simplest
+ * correct algorithm that meets an auth-abuse requirement; its known weakness
+ * (a burst across a window boundary can momentarily allow up to 2x) is
+ * acceptable here and documented in the README.
+ *
+ * The interface is async because the persistent store performs database I/O.
+ * Call sites `await` the methods uniformly.
+ *
+ * Pure module (no Next.js imports) so the in-memory limiter is trivially
+ * unit-testable.
  */
 
 export interface RateLimitResult {
@@ -24,12 +42,16 @@ export interface RateLimiterOptions {
 }
 
 export interface RateLimiter {
-  /** Reports whether `key` may proceed. Does not count an event. */
-  check(key: string): RateLimitResult;
+  /**
+   * Reports whether `key` may proceed. MUST NOT count an event — callers
+   * `check()` first and only `hit()` when the action actually proceeds, so a
+   * rejected request does not extend the window.
+   */
+  check(key: string): Promise<RateLimitResult>;
   /** Counts one event for `key`. */
-  hit(key: string): void;
+  hit(key: string): Promise<void>;
   /** Forgets `key` (e.g. after a successful login). */
-  reset(key: string): void;
+  reset(key: string): Promise<void>;
 }
 
 interface Entry {
@@ -37,7 +59,13 @@ interface Entry {
   resetAt: number;
 }
 
-export function createRateLimiter(options: RateLimiterOptions): RateLimiter {
+/**
+ * Process-local fixed-window limiter. Retained for unit tests and as the
+ * reference implementation of the shared interface.
+ */
+export function createInMemoryRateLimiter(
+  options: RateLimiterOptions,
+): RateLimiter {
   const { limit, windowMs, maxKeys = 10_000, now = Date.now } = options;
   const entries = new Map<string, Entry>();
 
@@ -65,7 +93,7 @@ export function createRateLimiter(options: RateLimiterOptions): RateLimiter {
   }
 
   return {
-    check(key) {
+    async check(key) {
       const entry = active(key);
       if (entry && entry.count >= limit) {
         return {
@@ -78,7 +106,7 @@ export function createRateLimiter(options: RateLimiterOptions): RateLimiter {
       }
       return { allowed: true, retryAfterSeconds: 0 };
     },
-    hit(key) {
+    async hit(key) {
       const entry = active(key);
       if (entry) {
         entry.count += 1;
@@ -87,11 +115,17 @@ export function createRateLimiter(options: RateLimiterOptions): RateLimiter {
       makeRoom();
       entries.set(key, { count: 1, resetAt: now() + windowMs });
     },
-    reset(key) {
+    async reset(key) {
       entries.delete(key);
     },
   };
 }
+
+/**
+ * Backwards-compatible alias for the in-memory limiter. Prefer the explicit
+ * `createInMemoryRateLimiter` for new non-persistent uses.
+ */
+export const createRateLimiter = createInMemoryRateLimiter;
 
 /** Persian "too many attempts" message with a whole-minute wait. */
 export function tooManyAttemptsMessage(retryAfterSeconds: number): string {

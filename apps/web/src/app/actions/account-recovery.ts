@@ -12,7 +12,7 @@ import {
   VERIFICATION_EMAIL_SENT_MESSAGE,
 } from "@/lib/account-recovery";
 import type { RecoveryFormState } from "@/lib/auth-form";
-import { getAuthLimiters } from "@/lib/auth-rate-limit";
+import { getAuthLimiters, enforceLimits } from "@/lib/auth-rate-limit";
 import {
   consumeEmailVerifyToken,
   consumePasswordResetTokenAndSetPassword,
@@ -59,17 +59,13 @@ export async function requestPasswordResetAction(
 
   const { forgotIp, forgotEmail } = getAuthLimiters();
   const ip = getClientIp(await headers());
-  const ipGate = forgotIp.check(ip);
-  const emailGate = forgotEmail.check(parsed.data.email);
-  if (!ipGate.allowed || !emailGate.allowed) {
-    return {
-      message: tooManyAttemptsMessage(
-        Math.max(ipGate.retryAfterSeconds, emailGate.retryAfterSeconds),
-      ),
-    };
+  const gate = await enforceLimits([
+    { limiter: forgotIp, key: ip },
+    { limiter: forgotEmail, key: parsed.data.email },
+  ]);
+  if (!gate.allowed) {
+    return { message: tooManyAttemptsMessage(gate.retryAfterSeconds) };
   }
-  forgotIp.hit(ip);
-  forgotEmail.hit(parsed.data.email);
 
   // Pre-flight BEFORE any account lookup: an environment that cannot send
   // email answers every submission — existing address or not — with the
@@ -126,11 +122,10 @@ export async function resetPasswordAction(
 
   const { tokenIp } = getAuthLimiters();
   const ip = getClientIp(await headers());
-  const gate = tokenIp.check(ip);
+  const gate = await enforceLimits([{ limiter: tokenIp, key: ip }]);
   if (!gate.allowed) {
     return { message: tooManyAttemptsMessage(gate.retryAfterSeconds) };
   }
-  tokenIp.hit(ip);
 
   const passwordHash = await hashPassword(parsed.data.password);
 
@@ -164,11 +159,10 @@ export async function verifyEmailAction(
 
   const { tokenIp } = getAuthLimiters();
   const ip = getClientIp(await headers());
-  const gate = tokenIp.check(ip);
+  const gate = await enforceLimits([{ limiter: tokenIp, key: ip }]);
   if (!gate.allowed) {
     return { message: tooManyAttemptsMessage(gate.retryAfterSeconds) };
   }
-  tokenIp.hit(ip);
 
   const userId = await consumeEmailVerifyToken(parsed.data.token);
   if (!userId) {
@@ -190,17 +184,13 @@ export async function resendVerificationAction(): Promise<RecoveryFormState> {
 
   const { resendUser, resendIp } = getAuthLimiters();
   const ip = getClientIp(await headers());
-  const userGate = resendUser.check(userId);
-  const ipGate = resendIp.check(ip);
-  if (!userGate.allowed || !ipGate.allowed) {
-    return {
-      message: tooManyAttemptsMessage(
-        Math.max(userGate.retryAfterSeconds, ipGate.retryAfterSeconds),
-      ),
-    };
+  const gate = await enforceLimits([
+    { limiter: resendUser, key: userId },
+    { limiter: resendIp, key: ip },
+  ]);
+  if (!gate.allowed) {
+    return { message: tooManyAttemptsMessage(gate.retryAfterSeconds) };
   }
-  resendUser.hit(userId);
-  resendIp.hit(ip);
 
   if (await isEmailVerified(userId)) {
     return { success: true, message: ALREADY_VERIFIED_MESSAGE };

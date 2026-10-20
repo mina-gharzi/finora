@@ -20,6 +20,10 @@ try {
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
+  // Persistent rate-limit counters survive between runs; clear them once up
+  // front so a previous run cannot leave a bucket exhausted. The per-test
+  // unique forwarded IP fixture keeps buckets separate within the run.
+  globalSetup: "./e2e/global-setup.ts",
   // Every test registers a throwaway account against the same local Postgres;
   // the default worker count (≈ CPU count) saturates it and makes registration
   // flaky, so keep a small, deterministic pool.

@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { authenticate, field } from "./helpers";
 
 /** Today as a Gregorian `YYYY-MM-DD` day, in UTC — the server's convention. */

@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import {
   INVALID_TOKEN_MESSAGE,
   PASSWORD_RESET_DONE_MESSAGE,
@@ -24,13 +25,6 @@ async function login(page: Page, email: string, password: string): Promise<void>
 }
 
 test.describe("password recovery", () => {
-  test.beforeEach(async ({ context }) => {
-    // Isolate per-test IP so process-local limiters don't cross-contaminate.
-    await context.setExtraHTTPHeaders({
-      "x-forwarded-for": `198.51.100.${(Date.now() % 250) + 1}`,
-    });
-  });
-
   test("answers an unknown address with the generic sent message", async ({
     page,
   }) => {
@@ -118,12 +112,6 @@ test.describe("password recovery", () => {
 });
 
 test.describe("email verification", () => {
-  test.beforeEach(async ({ context }) => {
-    await context.setExtraHTTPHeaders({
-      "x-forwarded-for": `198.51.101.${(Date.now() % 250) + 1}`,
-    });
-  });
-
   test("rejects expired, forged and wrong-purpose verification tokens identically", async ({
     page,
   }) => {

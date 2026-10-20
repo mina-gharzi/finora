@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import {
   EMAIL_CHANGE_ALREADY_USED_MESSAGE,
   EMAIL_CHANGE_SENT_MESSAGE,
@@ -35,13 +36,6 @@ async function requestChange(page: Page, newEmail: string): Promise<void> {
 }
 
 test.describe("email change", () => {
-  test.beforeEach(async ({ context }) => {
-    // Isolate per-test IP so process-local limiters don't cross-contaminate.
-    await context.setExtraHTTPHeaders({
-      "x-forwarded-for": `198.51.102.${(Date.now() % 250) + 1}`,
-    });
-  });
-
   test("validates the address and never claims a send that cannot happen", async ({
     page,
   }) => {

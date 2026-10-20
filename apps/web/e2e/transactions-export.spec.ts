@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { authenticate, field } from "./helpers";
 
 /** Reads a finished download back as UTF-8 text (BOM preserved). */

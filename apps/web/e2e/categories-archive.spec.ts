@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { authenticate, field } from "./helpers";
 
 /** Creates the shared test account through the UI. */
@@ -62,13 +63,6 @@ async function restoreCategory(page: Page, name: string): Promise<void> {
 }
 
 test.describe("category archive and restore", () => {
-  test.beforeEach(async ({ context }) => {
-    // Isolate per-test IP so process-local limiters don't cross-contaminate.
-    await context.setExtraHTTPHeaders({
-      "x-forwarded-for": `198.51.105.${(Date.now() % 250) + 1}`,
-    });
-  });
-
   test("archives a category, hides it from new transactions, then restores it", async ({
     page,
   }) => {

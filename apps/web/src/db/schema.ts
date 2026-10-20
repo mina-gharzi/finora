@@ -5,6 +5,7 @@ import {
   check,
   date,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -204,3 +205,36 @@ export const transactions = pgTable(
 
 export type TransactionRow = typeof transactions.$inferSelect;
 export type NewTransactionRow = typeof transactions.$inferInsert;
+
+/**
+ * Persistent fixed-window rate-limit counters, shared across application
+ * instances that use the same database.
+ *
+ * PRIVACY: `key_hash` is the SHA-256 hex digest of the scope + normalized
+ * identifier (e.g. `login:account:<lowercased email>`) — never the raw email,
+ * IP, token, or any credential. The table therefore stores no directly
+ * identifying data. `expires_at` is derived from `window_start + windowMs`
+ * and bounds every row's lifetime so cleanup is a cheap indexed delete.
+ *
+ * CONCURRENCY: exactly one row per key. Each event is a single
+ * `INSERT ... ON CONFLICT DO UPDATE` that either starts a fresh window or
+ * increments the current one atomically, so concurrent requests cannot
+ * double-count or bypass the limit through a read-then-write gap.
+ */
+export const rateLimitCounters = pgTable(
+  "rate_limit_counters",
+  {
+    keyHash: text("key_hash").primaryKey(),
+    count: integer("count").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    // Supports the expiry sweep without scanning the whole table.
+    index("rate_limit_counters_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
+export type RateLimitCounterRow = typeof rateLimitCounters.$inferSelect;

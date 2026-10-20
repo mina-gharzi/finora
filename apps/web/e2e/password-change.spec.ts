@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { field, makeCredentials, registerUser } from "./helpers";
 
 async function login(
@@ -25,13 +26,6 @@ async function submitChange(
 }
 
 test.describe("password change", () => {
-  test.beforeEach(async ({ context }) => {
-    // Isolate per-test IP so process-local limiters don't cross-contaminate.
-    await context.setExtraHTTPHeaders({
-      "x-forwarded-for": `198.51.103.${(Date.now() % 250) + 1}`,
-    });
-  });
-
   test("changes the password from settings, signs out, and requires the new password", async ({
     page,
   }) => {

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { authenticate, field } from "./helpers";
 
 /** Reads a finished download back as UTF-8 text (BOM preserved). */
@@ -44,13 +45,6 @@ async function search(page: Page, term: string): Promise<void> {
 }
 
 test.describe("transaction note search", () => {
-  test.beforeEach(async ({ context }) => {
-    // Isolate per-test IP so process-local limiters don't cross-contaminate.
-    await context.setExtraHTTPHeaders({
-      "x-forwarded-for": `198.51.104.${(Date.now() % 250) + 1}`,
-    });
-  });
-
   test("finds notes, composes with the type filter, and clears back to all rows", async ({
     page,
   }) => {

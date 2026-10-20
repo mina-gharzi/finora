@@ -11,7 +11,7 @@ import {
   INVALID_TOKEN_MESSAGE,
 } from "@/lib/account-recovery";
 import type { RecoveryFormState } from "@/lib/auth-form";
-import { getAuthLimiters } from "@/lib/auth-rate-limit";
+import { getAuthLimiters, enforceLimits } from "@/lib/auth-rate-limit";
 import {
   consumeEmailChangeTokenAndSetEmail,
   discardAuthToken,
@@ -63,17 +63,13 @@ export async function requestEmailChangeAction(
 
   const { changeEmailUser, changeEmailIp } = getAuthLimiters();
   const ip = getClientIp(await headers());
-  const userGate = changeEmailUser.check(userId);
-  const ipGate = changeEmailIp.check(ip);
-  if (!userGate.allowed || !ipGate.allowed) {
-    return {
-      message: tooManyAttemptsMessage(
-        Math.max(userGate.retryAfterSeconds, ipGate.retryAfterSeconds),
-      ),
-    };
+  const gate = await enforceLimits([
+    { limiter: changeEmailUser, key: userId },
+    { limiter: changeEmailIp, key: ip },
+  ]);
+  if (!gate.allowed) {
+    return { message: tooManyAttemptsMessage(gate.retryAfterSeconds) };
   }
-  changeEmailUser.hit(userId);
-  changeEmailIp.hit(ip);
 
   const newEmail = parsed.data.email;
 
@@ -126,11 +122,10 @@ export async function confirmEmailChangeAction(
 
   const { tokenIp } = getAuthLimiters();
   const ip = getClientIp(await headers());
-  const gate = tokenIp.check(ip);
+  const gate = await enforceLimits([{ limiter: tokenIp, key: ip }]);
   if (!gate.allowed) {
     return { message: tooManyAttemptsMessage(gate.retryAfterSeconds) };
   }
-  tokenIp.hit(ip);
 
   // Single-use + atomic: the token CAS, the address write, the verification
   // mark and the session-invalidation watermark commit together or not at

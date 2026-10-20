@@ -48,6 +48,22 @@ vi.mock("@/lib/session", () => ({
 vi.mock("@/app/actions/account-recovery", () => ({
   sendInitialVerificationEmail: mocks.sendInitialVerificationEmail,
 }));
+// The auth actions delegate to the database-backed limiter. Swap it for the
+// pure in-memory implementation so policy wiring (which scope, which key) is
+// exercised without a database; real persistence is covered by
+// persistent-rate-limit.test.ts.
+vi.mock("@/lib/persistent-rate-limit", async () => {
+  const { createInMemoryRateLimiter } = await vi.importActual<
+    typeof import("@/lib/rate-limit")
+  >("@/lib/rate-limit");
+  return {
+    createPersistentRateLimiter: (opts: {
+      limit: number;
+      windowMs: number;
+    }) => createInMemoryRateLimiter(opts),
+    RateLimitStoreError: class RateLimitStoreError extends Error {},
+  };
+});
 
 import {
   changePasswordAction,

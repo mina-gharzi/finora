@@ -29,6 +29,13 @@
       "when": 1792498562870,
       "tag": "0003_broad_beyonder",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792507678664,
+      "tag": "0004_optimal_madripoor",
+      "breakpoints": true
     }
   ]
 }

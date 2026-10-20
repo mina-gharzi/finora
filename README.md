@@ -113,6 +113,47 @@ than the unit tests do:
 E2E tests are not part of `.github/workflows/ci.yml`, because CI has no
 database container or secrets.
 
+## Rate limiting
+
+Abuse-sensitive authentication operations (login, registration, password
+recovery, email verification resend, email change) are protected by a
+**persistent, database-backed fixed-window limiter**, so limits hold across
+every process and instance that shares the database — not just within one
+server process.
+
+- **Storage.** Counters live in the `rate_limit_counters` table (migration
+  `0004_optimal_madripoor.sql`). Every key is the SHA-256 digest of
+  `scope:identifier`; only the digest is stored, never a raw email, IP, token,
+  or credential. Apply it like any other migration:
+  `pnpm --filter @finora/web db:migrate`.
+- **Counting.** Counts are per scope. Login counts **only failed attempts**
+  (a successful sign-in clears the account counter); registration, recovery,
+  resend, and email-change count **every** attempt. An account-scope check and
+  an IP-scope check are independent, so exhausting one does not affect the
+  other.
+- **Concurrency.** Each event is a single atomic
+  `INSERT … ON CONFLICT … DO UPDATE`, so concurrent requests cannot race past
+  the limit. Fixed windows can allow a burst at a window boundary; that
+  trade-off is accepted here.
+- **Cleanup.** Expired rows are removed opportunistically (one indexed delete
+  per `hit`, probability-gated) plus an on-demand `sweepAllExpired()` for a
+  scheduled job. Retention stays bounded without a scan on the request path.
+- **Store outage = fail closed.** If the database is unreachable, every
+  guarded operation is denied with the generic "too many attempts" message —
+  an auth endpoint never fails open.
+
+### Trusted proxy and client IP
+
+Per-IP limits need the client's real address, which is only trustworthy when
+the request passes through known proxies. The `TRUSTED_PROXY_HOPS` environment
+variable (default `0`) declares how many trusted proxies append to
+`x-forwarded-for`; the limiter takes the Nth entry from the right and ignores
+everything to its left (spoofable). With the default of `0` **no forwarding
+header is trusted**: every caller collapses to one `unknown` bucket, so per-IP
+limits still apply as a coarse backstop and header spoofing cannot evade the
+per-account/per-user limits. Set it to the real hop count in production (e.g.
+`1` behind a single load balancer). See `apps/web/src/lib/client-ip.ts`.
+
 ## Local database
 
 Finora uses a local PostgreSQL container for development.

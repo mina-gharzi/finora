@@ -39,6 +39,14 @@ describe("E2E server environment guard (playwright webServer.env)", () => {
     expect(env.EMAIL_PROVIDER).toBe("");
   });
 
+  it("declares exactly one trusted proxy hop so per-test IP isolation works", () => {
+    // The suite injects a per-test x-forwarded-for; the persistent rate limiter
+    // only honours it when a trusted hop is declared, otherwise every test
+    // would share one bucket and exhaust the register/login limits.
+    const env = serverEnvWithEmailDeliveryDisabled();
+    expect(env.TRUSTED_PROXY_HOPS).toBe("1");
+  });
+
   it("preserves unrelated environment variables required by the suite", () => {
     const env = serverEnvWithEmailDeliveryDisabled();
     expect(env[PROBE_KEY]).toBe("probe-value");

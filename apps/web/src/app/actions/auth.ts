@@ -4,7 +4,13 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { sendInitialVerificationEmail } from "@/app/actions/account-recovery";
 import type { AuthFormState } from "@/lib/auth-form";
-import { getAuthLimiters } from "@/lib/auth-rate-limit";
+import {
+  getAuthLimiters,
+  checkLimits,
+  enforceLimits,
+  hitLimits,
+  resetLimits,
+} from "@/lib/auth-rate-limit";
 import { getClientIp } from "@/lib/client-ip";
 import { requireUserId } from "@/lib/dal";
 import { isUniqueViolation } from "@/lib/db-errors";
@@ -45,11 +51,10 @@ export async function registerAction(
   // Limit before any hashing or database work so abuse stays cheap to reject.
   const { registerIp } = getAuthLimiters();
   const ip = getClientIp(await headers());
-  const gate = registerIp.check(ip);
+  const gate = await enforceLimits([{ limiter: registerIp, key: ip }]);
   if (!gate.allowed) {
     return { message: tooManyAttemptsMessage(gate.retryAfterSeconds) };
   }
-  registerIp.hit(ip);
 
   const { name, email, password } = parsed.data;
 
@@ -99,14 +104,12 @@ export async function loginAction(
   // never reveals account existence. Checked before bcrypt to save CPU.
   const { loginAccount, loginIp } = getAuthLimiters();
   const ip = getClientIp(await headers());
-  const accountGate = loginAccount.check(email);
-  const ipGate = loginIp.check(ip);
-  if (!accountGate.allowed || !ipGate.allowed) {
-    return {
-      message: tooManyAttemptsMessage(
-        Math.max(accountGate.retryAfterSeconds, ipGate.retryAfterSeconds),
-      ),
-    };
+  const gate = await checkLimits([
+    { limiter: loginAccount, key: email },
+    { limiter: loginIp, key: ip },
+  ]);
+  if (!gate.allowed) {
+    return { message: tooManyAttemptsMessage(gate.retryAfterSeconds) };
   }
 
   const user = await findUserByEmail(email);
@@ -118,12 +121,23 @@ export async function loginAction(
   );
 
   if (!user || !isPasswordValid) {
-    loginAccount.hit(email);
-    loginIp.hit(ip);
+    // Only FAILED logins consume the budget, so a legitimate sign-in never
+    // counts against the account; a store failure here still returns the
+    // generic invalid-credentials answer (the attempt was not counted, but the
+    // gate above already proved the store reachable, and the next attempt will
+    // fail closed if it is not).
+    await hitLimits([
+      { limiter: loginAccount, key: email },
+      { limiter: loginIp, key: ip },
+    ]);
     return { message: "ایمیل یا گذرواژه نادرست است." };
   }
 
-  loginAccount.reset(email);
+  // Clear the account-scoped counter on success so a forgotten-password burst
+  // before a correct login does not lock the account out. A store failure is
+  // swallowed here (a store outage must not become a login outage) — the IP
+  // counter remains as the backstop.
+  await resetLimits([{ limiter: loginAccount, key: email }]);
   await createSession(user.id);
   redirect("/");
 }

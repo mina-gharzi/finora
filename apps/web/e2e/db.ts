@@ -38,6 +38,19 @@ export async function markEmailVerified(email: string): Promise<void> {
   );
 }
 
+/**
+ * Empties the persistent rate-limit counters.
+ *
+ * The counters live in Postgres and survive across runs. Every e2e test uses a
+ * fresh forwarded IP (see e2e/fixtures.ts), so buckets never collide within a
+ * run — but a previous run (or a developer's manual testing) could have left a
+ * bucket at its limit. A clean slate per run keeps the suite deterministic.
+ * This touches only the rate-limit table, never application data.
+ */
+export async function clearRateLimitCounters(): Promise<void> {
+  await withClient((client) => client.query("DELETE FROM rate_limit_counters"));
+}
+
 /** Undoes verification so a flow can exercise the unverified state. */
 export async function markEmailUnverified(email: string): Promise<void> {
   await withClient((client) =>

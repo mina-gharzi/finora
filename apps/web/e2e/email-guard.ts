@@ -29,5 +29,12 @@ export function serverEnvWithEmailDeliveryDisabled(): {
   env.RESEND_API_KEY = "";
   env.EMAIL_FROM = "";
   env.EMAIL_PROVIDER = "";
+  // The E2E suite injects a per-test `x-forwarded-for` header (through
+  // `context.setExtraHTTPHeaders`) to isolate rate-limit buckets between
+  // tests. That header is only honoured when the deployment declares at least
+  // one trusted proxy hop; without this the persistent register/login limits
+  // would all share one bucket and the suite would exhaust them. The Playwright
+  // harness IS the trusted proxy here, so declare exactly one hop.
+  env.TRUSTED_PROXY_HOPS = "1";
   return env;
 }
