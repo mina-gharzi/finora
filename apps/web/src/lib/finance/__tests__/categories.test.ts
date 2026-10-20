@@ -32,6 +32,7 @@ import {
   findCategoryForUser,
   listCategories,
   renameCategory,
+  setCategoryArchived,
 } from "@/lib/finance/categories";
 
 const OWNER = "11111111-1111-4111-8111-111111111111";
@@ -283,5 +284,64 @@ describe("deleteCategory — reference safety", () => {
       reason: "not_found",
     });
     expect(h.state.deleteCalls).toBe(0);
+  });
+});
+
+describe("setCategoryArchived", () => {
+  it("archives an owned category with a single owner-scoped update", async () => {
+    h.state.updateResult = [categoryRow({ archived: true })];
+
+    const result = await setCategoryArchived(OWNER, CATEGORY_ID, true);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.category.archived).toBe(true);
+    expect(h.state.updateCalls).toBe(1);
+    expect(h.state.updatedValues[0]).toMatchObject({ archived: true });
+
+    const { sql, params } = new PgDialect().sqlToQuery(lastWhere() as never);
+    expect(sql).toContain("id");
+    expect(sql).toContain("user_id");
+    expect(params).toContain(OWNER);
+    expect(params).toContain(CATEGORY_ID);
+  });
+
+  it("unarchives an owned category", async () => {
+    h.state.updateResult = [categoryRow({ archived: false })];
+
+    const result = await setCategoryArchived(OWNER, CATEGORY_ID, false);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.category.archived).toBe(false);
+    expect(h.state.updatedValues[0]).toMatchObject({ archived: false });
+  });
+
+  it("is safe to repeat — flipping the same flag twice still succeeds", async () => {
+    h.state.updateResult = [categoryRow({ archived: true })];
+
+    await expect(
+      setCategoryArchived(OWNER, CATEGORY_ID, true),
+    ).resolves.toMatchObject({ ok: true });
+    await expect(
+      setCategoryArchived(OWNER, CATEGORY_ID, true),
+    ).resolves.toMatchObject({ ok: true });
+    expect(h.state.updateCalls).toBe(2);
+  });
+
+  it("never flips another user's category and reports not_found", async () => {
+    // The owner-scoped WHERE matches nothing for a foreign row.
+    h.state.updateResult = [];
+
+    await expect(setCategoryArchived(OWNER, CATEGORY_ID, true)).resolves.toEqual({
+      ok: false,
+      reason: "not_found",
+    });
+    expect(h.state.updateCalls).toBe(1);
+  });
+
+  it("rejects a malformed id before touching the database", async () => {
+    await expect(
+      setCategoryArchived(OWNER, "not-a-uuid", true),
+    ).resolves.toEqual({ ok: false, reason: "not_found" });
+    expect(h.state.updateCalls).toBe(0);
   });
 });

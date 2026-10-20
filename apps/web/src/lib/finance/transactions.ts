@@ -39,6 +39,12 @@ import type { TransactionType } from "./types";
  * here ever archives, deletes or rewrites an account; transactions of archived
  * accounts remain fully visible in history, dashboards, reports and exports.
  *
+ * Archived-category policy mirrors the account rules exactly: an archived
+ * category is never offered or accepted for a new transaction, but an edit
+ * may keep the transaction's own archived category so historical rows stay
+ * editable and understandable. Archived categories keep their name everywhere
+ * history is displayed; archiving never touches or unlinks transactions.
+ *
  * Amounts are integer Toman, always positive; `type` carries the direction.
  *
  * Reads are equally strictly scoped: `listTransactions` and
@@ -60,6 +66,8 @@ const ACCOUNT_ARCHIVED =
 const CATEGORY_NOT_FOUND = "دسته‌بندی موردنظر یافت نشد.";
 const CATEGORY_TYPE_MISMATCH =
   "دسته‌بندی انتخاب‌شده با نوع تراکنش هم‌خوانی ندارد.";
+const CATEGORY_ARCHIVED =
+  "دسته‌بندی بایگانی‌شده قابل انتخاب نیست؛ ابتدا آن را از بایگانی خارج کنید.";
 
 type ReferenceResolution =
   | { ok: true }
@@ -71,6 +79,11 @@ interface ReferenceOptions {
    * transaction is already on). Everything else archived is rejected.
    */
   allowArchivedAccountId?: string;
+  /**
+   * An archived category id that may still be referenced (the category a
+   * transaction is already on). Everything else archived is rejected.
+   */
+  allowArchivedCategoryId?: string;
 }
 
 /**
@@ -80,9 +93,10 @@ interface ReferenceOptions {
  * to a direction ("income" or "expense"), so borrowing one across directions is
  * rejected even though ownership is valid.
  *
- * An archived account is rejected unless it is the transaction's current
- * account (`allowArchivedAccountId`), so archived accounts can never be chosen
- * for new rows while existing rows stay editable in place.
+ * An archived account or category is rejected unless it is the transaction's
+ * current account/category (`allowArchivedAccountId` / `allowArchivedCategoryId`),
+ * so archived options can never be chosen for new rows while existing rows stay
+ * editable in place on their own archived references.
  */
 async function resolveReferences(
   userId: string,
@@ -108,6 +122,10 @@ async function resolveReferences(
 
     if (category.kind !== type) {
       return { ok: false, fieldErrors: { categoryId: CATEGORY_TYPE_MISMATCH } };
+    }
+
+    if (category.archived && categoryId !== options.allowArchivedCategoryId) {
+      return { ok: false, fieldErrors: { categoryId: CATEGORY_ARCHIVED } };
     }
   }
 
@@ -194,9 +212,12 @@ export async function updateTransaction(
     parsed.data.accountId,
     parsed.data.categoryId,
     parsed.data.type,
-    // Keeping the transaction on its own (possibly archived) account is fine;
-    // moving it onto any *other* archived account is not.
-    { allowArchivedAccountId: existing.accountId },
+    // Keeping the transaction on its own (possibly archived) account and
+    // category is fine; moving it onto any *other* archived one is not.
+    {
+      allowArchivedAccountId: existing.accountId,
+      allowArchivedCategoryId: existing.categoryId ?? undefined,
+    },
   );
   if (!references.ok) {
     return { ok: false, reason: "invalid", fieldErrors: references.fieldErrors };

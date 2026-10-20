@@ -808,3 +808,141 @@ describe("archived-account policy", () => {
     expect(h.state.updateCalls).toBe(1);
   });
 });
+
+describe("archived-category policy", () => {
+  const ownedActiveCategory = {
+    id: CATEGORY_ID,
+    userId: OWNER,
+    kind: "expense",
+    archived: false,
+  };
+  const ownedArchivedCategory = {
+    id: CATEGORY_ID,
+    userId: OWNER,
+    kind: "expense",
+    archived: true,
+  };
+  const SECOND_CATEGORY_ID = "88888888-8888-4888-8888-888888888888";
+  const archivedSecondCategory = {
+    id: SECOND_CATEGORY_ID,
+    userId: OWNER,
+    kind: "expense",
+    archived: true,
+  };
+  const activeSecondCategory = {
+    id: SECOND_CATEGORY_ID,
+    userId: OWNER,
+    kind: "expense",
+    archived: false,
+  };
+  const categoryInput = { ...baseInput, categoryId: CATEGORY_ID };
+
+  it("refuses to create a transaction with an archived category", async () => {
+    h.state.selectQueue = [[ownedAccount], [ownedArchivedCategory]];
+
+    const result = await createTransaction(OWNER, categoryInput);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.fieldErrors.categoryId).toContain("بایگانی");
+    expect(h.state.insertCalls).toBe(0);
+  });
+
+  it("creates a transaction with an active category", async () => {
+    h.state.selectQueue = [[ownedAccount], [ownedActiveCategory]];
+    h.state.insertResult = [transactionRow({ categoryId: CATEGORY_ID })];
+
+    const result = await createTransaction(OWNER, categoryInput);
+
+    expect(result.ok).toBe(true);
+    expect(h.state.insertCalls).toBe(1);
+  });
+
+  it("keeps an existing transaction on its own archived category when editing", async () => {
+    h.state.selectQueue = [
+      [transactionRow({ categoryId: CATEGORY_ID })],
+      [ownedAccount],
+      [ownedArchivedCategory],
+    ];
+    h.state.updateResult = [transactionRow({ categoryId: CATEGORY_ID })];
+
+    const result = await updateTransaction(OWNER, transactionRow().id, {
+      ...categoryInput,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(h.state.updateCalls).toBe(1);
+  });
+
+  it("refuses to move a transaction onto a different archived category", async () => {
+    h.state.selectQueue = [
+      [transactionRow({ categoryId: CATEGORY_ID })],
+      [ownedAccount],
+      [archivedSecondCategory],
+    ];
+
+    const result = await updateTransaction(OWNER, transactionRow().id, {
+      ...baseInput,
+      categoryId: SECOND_CATEGORY_ID,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok && result.reason === "invalid") {
+      expect(result.fieldErrors.categoryId).toContain("بایگانی");
+    }
+    expect(h.state.updateCalls).toBe(0);
+  });
+
+  it("allows moving a transaction from an archived category to an active one", async () => {
+    h.state.selectQueue = [
+      [transactionRow({ categoryId: CATEGORY_ID })],
+      [ownedAccount],
+      [activeSecondCategory],
+    ];
+    h.state.updateResult = [
+      transactionRow({ categoryId: SECOND_CATEGORY_ID }),
+    ];
+
+    const result = await updateTransaction(OWNER, transactionRow().id, {
+      ...baseInput,
+      categoryId: SECOND_CATEGORY_ID,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(h.state.updateCalls).toBe(1);
+  });
+
+  it("still enforces the category kind alongside the archived check", async () => {
+    h.state.selectQueue = [
+      [transactionRow({ categoryId: CATEGORY_ID })],
+      [ownedAccount],
+      [{ ...ownedArchivedCategory, kind: "income" }],
+    ];
+
+    const result = await updateTransaction(OWNER, transactionRow().id, {
+      ...categoryInput,
+    });
+
+    // The kind mismatch is reported before the archived check can allow it.
+    expect(result.ok).toBe(false);
+    if (!result.ok && result.reason === "invalid") {
+      expect(result.fieldErrors.categoryId).toContain("هم‌خوانی");
+    }
+    expect(h.state.updateCalls).toBe(0);
+  });
+
+  it("allows removing the category entirely from a transaction on an archived one", async () => {
+    h.state.selectQueue = [
+      [transactionRow({ categoryId: CATEGORY_ID })],
+      [ownedAccount],
+    ];
+    h.state.updateResult = [transactionRow({ categoryId: null })];
+
+    const result = await updateTransaction(OWNER, transactionRow().id, {
+      ...baseInput,
+      categoryId: null,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(h.state.updateCalls).toBe(1);
+  });
+});

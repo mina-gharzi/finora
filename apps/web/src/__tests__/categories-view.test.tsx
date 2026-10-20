@@ -13,6 +13,7 @@ vi.mock("@/app/actions/categories", () => ({
   createCategoryAction: vi.fn(),
   renameCategoryAction: vi.fn(),
   deleteCategoryAction: vi.fn(),
+  setCategoryArchivedAction: vi.fn(),
 }));
 
 vi.mock("react", async () => {
@@ -27,12 +28,13 @@ import { CategoriesView } from "@/components/categories/categories-view";
 import { CreateCategoryForm } from "@/components/categories/create-category-form";
 import { DeleteCategoryButton } from "@/components/categories/delete-category-button";
 import { RenameCategoryForm } from "@/components/categories/rename-category-form";
+import { ArchiveCategoryButton } from "@/components/categories/archive-category-button";
 import type { CategoryItem } from "@/components/categories/categories-view";
 
 const CATEGORIES: CategoryItem[] = [
-  { id: "cat-1", name: "حقوق", kind: "income" },
-  { id: "cat-2", name: "خرید روزانه", kind: "expense" },
-  { id: "cat-3", name: "اجاره", kind: "expense" },
+  { id: "cat-1", name: "حقوق", kind: "income", archived: false },
+  { id: "cat-2", name: "خرید روزانه", kind: "expense", archived: false },
+  { id: "cat-3", name: "اجاره", kind: "expense", archived: false },
 ];
 
 beforeEach(() => {
@@ -74,7 +76,9 @@ describe("CategoriesView — type switch", () => {
   it("shows a per-type empty state when a type has no categories", () => {
     render(
       <CategoriesView
-        categories={[{ id: "cat-1", name: "حقوق", kind: "income" }]}
+        categories={[
+          { id: "cat-1", name: "حقوق", kind: "income", archived: false },
+        ]}
       />,
     );
 
@@ -122,6 +126,104 @@ describe("CategoriesView — type switch", () => {
     expect(
       screen.getByRole("button", { name: "حذف دسته‌بندی خرید روزانه" }),
     ).toBeTruthy();
+  });
+});
+
+describe("CategoriesView — archived categories", () => {
+  const WITH_ARCHIVED: CategoryItem[] = [
+    { id: "cat-1", name: "قدیمی", kind: "expense", archived: true },
+    { id: "cat-2", name: "خرید روزانه", kind: "expense", archived: false },
+  ];
+
+  it("badges archived categories and offers a restore control", () => {
+    render(<CategoriesView categories={WITH_ARCHIVED} />);
+
+    expect(screen.getByText("بایگانی‌شده")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "خروج از بایگانی دسته‌بندی قدیمی" }),
+    ).toBeTruthy();
+    // Active rows keep the plain archive trigger instead of the restore button.
+    expect(
+      screen.getByRole("button", { name: "بایگانی دسته‌بندی خرید روزانه" }),
+    ).toBeTruthy();
+  });
+
+  it("sorts active categories before archived ones within a kind", () => {
+    render(<CategoriesView categories={WITH_ARCHIVED} />);
+
+    const rows = screen
+      .getAllByRole("listitem")
+      .map((li) => li.textContent ?? "");
+    const activeIndex = rows.findIndex((row) => row.includes("خرید روزانه"));
+    const archivedIndex = rows.findIndex((row) => row.includes("قدیمی"));
+    expect(activeIndex).toBeGreaterThanOrEqual(0);
+    expect(archivedIndex).toBeGreaterThan(activeIndex);
+  });
+
+  it("counts archived categories on their kind tab and keeps rename/delete", () => {
+    render(<CategoriesView categories={WITH_ARCHIVED} />);
+
+    expect(screen.getByRole("tab", { name: /هزینه\s*2/ })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "ویرایش نام دسته‌بندی قدیمی" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "حذف دسته‌بندی قدیمی" }),
+    ).toBeTruthy();
+  });
+});
+
+describe("ArchiveCategoryButton", () => {
+  it("requires an explicit confirmation before archiving", () => {
+    render(
+      <ArchiveCategoryButton
+        categoryId="cat-1"
+        categoryName="خرید روزانه"
+        archived={false}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "تأیید بایگانی" })).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "بایگانی دسته‌بندی خرید روزانه" }),
+    );
+
+    expect(screen.getByRole("button", { name: "تأیید بایگانی" })).toBeTruthy();
+    expect(
+      document.querySelector<HTMLInputElement>('input[name="archived"]')?.value,
+    ).toBe("true");
+  });
+
+  it("restores on a single click with the archived flag cleared", () => {
+    render(
+      <ArchiveCategoryButton
+        categoryId="cat-1"
+        categoryName="خرید روزانه"
+        archived={true}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "خروج از بایگانی دسته‌بندی خرید روزانه" }),
+    ).toBeTruthy();
+    expect(
+      document.querySelector<HTMLInputElement>('input[name="archived"]')?.value,
+    ).toBe("false");
+  });
+
+  it("surfaces a failure message from the action", () => {
+    h.state = { status: "error", message: "دسته‌بندی موردنظر یافت نشد." };
+
+    render(
+      <ArchiveCategoryButton
+        categoryId="cat-1"
+        categoryName="خرید روزانه"
+        archived={false}
+      />,
+    );
+
+    expect(screen.getByText("دسته‌بندی موردنظر یافت نشد.")).toBeTruthy();
   });
 });
 

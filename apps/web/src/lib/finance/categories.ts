@@ -190,3 +190,42 @@ export async function deleteCategory(
   const transactionCount = await countTransactionsForCategory(categoryId);
   return { ok: false, reason: "has_transactions", transactionCount };
 }
+
+export type SetCategoryArchivedResult =
+  | { ok: true; category: CategoryRow }
+  | { ok: false; reason: "not_found" };
+
+/**
+ * Archives or unarchives a category owned by `userId`. Safety layers, in order:
+ * 1. A malformed id is reported as "not found" so callers cannot distinguish it
+ *    from a real-but-foreign id.
+ * 2. The write is scoped by `id = ? AND user_id = ?` in a single statement, so
+ *    no foreign row can ever be mutated and a zero-row update is reported as
+ *    `not_found`.
+ *
+ * Archiving is deliberately minimal: it flips the `archived` flag (and bumps
+ * `updatedAt`) and touches nothing else. Historical transactions keep their
+ * category reference and name — archiving only stops the category from being
+ * offered for NEW transactions — so reporting and history are never rewritten
+ * and the operation is fully reversible.
+ */
+export async function setCategoryArchived(
+  userId: string,
+  categoryId: string,
+  archived: boolean,
+): Promise<SetCategoryArchivedResult> {
+  if (!transactionIdSchema.safeParse(categoryId).success) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  const [category] = await getDb()
+    .update(categories)
+    .set({ archived, updatedAt: new Date() })
+    .where(and(eq(categories.id, categoryId), eq(categories.userId, userId)))
+    .returning();
+
+  if (!category) {
+    return { ok: false, reason: "not_found" };
+  }
+  return { ok: true, category };
+}

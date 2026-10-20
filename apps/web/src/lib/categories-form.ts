@@ -29,3 +29,14 @@ export interface DeleteCategoryState {
 export const EMPTY_DELETE_CATEGORY_STATE: DeleteCategoryState = {
   status: "idle",
 };
+
+export interface ArchiveCategoryState {
+  /** Form submission status. */
+  status: "idle" | "success" | "error";
+  /** General message shown to the user. */
+  message?: string;
+}
+
+export const EMPTY_ARCHIVE_CATEGORY_STATE: ArchiveCategoryState = {
+  status: "idle",
+};

@@ -17,7 +17,7 @@ function todayIsoDate(): string {
 
 async function AuthenticatedTransactionForm() {
   const userId = await requireUserId();
-  const [allAccounts, categories] = await Promise.all([
+  const [allAccounts, allCategories] = await Promise.all([
     listAccounts(userId),
     listCategories(userId),
   ]);
@@ -26,6 +26,9 @@ async function AuthenticatedTransactionForm() {
   // rejects them too); the unfiltered list is only used to tell "no accounts
   // at all" apart from "all accounts archived".
   const accounts = allAccounts.filter((account) => !account.archived);
+  // Archived categories follow the same rule: they stay on historical rows but
+  // are never selectable for a NEW transaction (the server rejects them too).
+  const categories = allCategories.filter((category) => !category.archived);
 
   return (
     <TransactionsView

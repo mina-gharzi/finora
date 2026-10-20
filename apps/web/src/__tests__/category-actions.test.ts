@@ -12,6 +12,11 @@ const h = vi.hoisted(() => ({
     input: unknown;
   }>,
   deleteCategoryCalls: [] as Array<{ userId: string; categoryId: string }>,
+  setCategoryArchivedCalls: [] as Array<{
+    userId: string;
+    categoryId: string;
+    archived: boolean;
+  }>,
 }));
 
 vi.mock("@/lib/dal", () => ({
@@ -37,6 +42,12 @@ vi.mock("@/lib/finance/categories", () => ({
     h.deleteCategoryCalls.push({ userId, categoryId });
     return { ok: true };
   }),
+  setCategoryArchived: vi.fn(
+    async (userId: string, categoryId: string, archived: boolean) => {
+      h.setCategoryArchivedCalls.push({ userId, categoryId, archived });
+      return { ok: true, category: { id: categoryId, archived } };
+    },
+  ),
 }));
 
 vi.mock("next/cache", () => ({
@@ -48,8 +59,10 @@ import {
   createCategoryAction,
   deleteCategoryAction,
   renameCategoryAction,
+  setCategoryArchivedAction,
 } from "@/app/actions/categories";
 import {
+  EMPTY_ARCHIVE_CATEGORY_STATE,
   EMPTY_CATEGORY_FORM_STATE,
   EMPTY_CATEGORY_RENAME_STATE,
   EMPTY_DELETE_CATEGORY_STATE,
@@ -64,6 +77,7 @@ beforeEach(() => {
   h.createCategoryCalls = [];
   h.renameCategoryCalls = [];
   h.deleteCategoryCalls = [];
+  h.setCategoryArchivedCalls = [];
   vi.clearAllMocks();
 });
 
@@ -222,6 +236,63 @@ describe("deleteCategoryAction", () => {
   });
 });
 
+describe("setCategoryArchivedAction", () => {
+  it("archives with the session owner and revalidates on success", async () => {
+    const fd = new FormData();
+    fd.set("categoryId", "cat-1");
+    fd.set("archived", "true");
+
+    const res = await setCategoryArchivedAction(EMPTY_ARCHIVE_CATEGORY_STATE, fd);
+
+    expect(res.status).toBe("success");
+    expect(h.setCategoryArchivedCalls[0]).toEqual({
+      userId: "user-1",
+      categoryId: "cat-1",
+      archived: true,
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/categories");
+    expect(revalidatePath).toHaveBeenCalledWith("/transactions");
+    expect(revalidatePath).toHaveBeenCalledWith("/transactions/new");
+  });
+
+  it("unarchives when the archived field is not 'true'", async () => {
+    const fd = new FormData();
+    fd.set("categoryId", "cat-1");
+    fd.set("archived", "false");
+
+    const res = await setCategoryArchivedAction(EMPTY_ARCHIVE_CATEGORY_STATE, fd);
+
+    expect(res.status).toBe("success");
+    expect(h.setCategoryArchivedCalls[0].archived).toBe(false);
+  });
+
+  it("rejects a blank id with a generic not-found message", async () => {
+    const fd = new FormData();
+    fd.set("categoryId", "");
+    fd.set("archived", "true");
+
+    const res = await setCategoryArchivedAction(EMPTY_ARCHIVE_CATEGORY_STATE, fd);
+    expect(res.status).toBe("error");
+    expect(res.message).toBeDefined();
+    expect(categoriesDal.setCategoryArchived).not.toHaveBeenCalled();
+  });
+
+  it("returns a generic message for a foreign or missing category", async () => {
+    vi.mocked(categoriesDal.setCategoryArchived).mockResolvedValueOnce({
+      ok: false,
+      reason: "not_found",
+    } as never);
+
+    const fd = new FormData();
+    fd.set("categoryId", "cat-1");
+    fd.set("archived", "true");
+
+    const res = await setCategoryArchivedAction(EMPTY_ARCHIVE_CATEGORY_STATE, fd);
+    expect(res.status).toBe("error");
+    expect(res.message).toBeDefined();
+  });
+});
+
 describe("category actions — email verification gate", () => {
   it("blocks every mutation for an unverified account before touching the domain", async () => {
     vi.mocked(dal.isEmailVerified).mockResolvedValue(false);
@@ -248,5 +319,16 @@ describe("category actions — email verification gate", () => {
     expect(deleteRes.status).toBe("error");
     expect(deleteRes.message).toBe(VERIFY_EMAIL_REQUIRED_MESSAGE);
     expect(categoriesDal.deleteCategory).not.toHaveBeenCalled();
+
+    const archiveForm = new FormData();
+    archiveForm.set("categoryId", "cat-1");
+    archiveForm.set("archived", "true");
+    const archiveRes = await setCategoryArchivedAction(
+      EMPTY_ARCHIVE_CATEGORY_STATE,
+      archiveForm,
+    );
+    expect(archiveRes.status).toBe("error");
+    expect(archiveRes.message).toBe(VERIFY_EMAIL_REQUIRED_MESSAGE);
+    expect(categoriesDal.setCategoryArchived).not.toHaveBeenCalled();
   });
 });

@@ -83,15 +83,42 @@ async function AuthenticatedEditTransaction({
 
   const returnHref = parseTransactionReturnTo((await searchParams).returnTo);
 
+  // Active categories are the eligible options, exactly like accounts. If this
+  // transaction already sits on an archived category, that category is included
+  // (badged) so the row stays editable in place — but no *other* archived
+  // category is offered, and the server rejects any attempt to switch a
+  // transaction onto one.
+  const activeCategories = categories.filter(
+    (category) => !category.archived,
+  );
+  const currentCategory = categories.find(
+    (category) => category.id === transaction.categoryId,
+  );
+  const categoryOptions =
+    currentCategory && currentCategory.archived
+      ? [
+          {
+            id: currentCategory.id,
+            name: `${currentCategory.name} (بایگانی‌شده)`,
+            kind: currentCategory.kind as TransactionType,
+          },
+          ...activeCategories.map((category) => ({
+            id: category.id,
+            name: category.name,
+            kind: category.kind as TransactionType,
+          })),
+        ]
+      : activeCategories.map((category) => ({
+          id: category.id,
+          name: category.name,
+          kind: category.kind as TransactionType,
+        }));
+
   return (
     <EditTransactionView
       transactionId={transaction.id}
       accounts={accountOptions}
-      categories={categories.map((category) => ({
-        id: category.id,
-        name: category.name,
-        kind: category.kind as TransactionType,
-      }))}
+      categories={categoryOptions}
       initialValues={{
         type: transaction.type as TransactionType,
         amountText: String(transaction.amount),

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { formatToman } from "@finora/shared";
 import type {
+  ArchiveCategoryState,
   CategoryFormState,
   CategoryRenameState,
   DeleteCategoryState,
@@ -13,10 +14,12 @@ import {
   createCategory,
   deleteCategory,
   renameCategory,
+  setCategoryArchived,
 } from "@/lib/finance/categories";
 
 const GENERIC_RENAME_ERROR = "دسته‌بندی موردنظر یافت نشد.";
 const GENERIC_DELETE_ERROR = "دسته‌بندی موردنظر یافت نشد.";
+const GENERIC_ARCHIVE_ERROR = "دسته‌بندی موردنظر یافت نشد.";
 
 /**
  * Reads a text field, yielding `""` when it was absent or not a string. The
@@ -149,4 +152,44 @@ export async function deleteCategoryAction(
   }
 
   return { status: "error", message: GENERIC_DELETE_ERROR };
+}
+
+/**
+ * Archives or unarchives an owned category, driven by the `archived` form field
+ * ("true" archives, anything else unarchives). The owner id comes exclusively
+ * from the verified session; the flag flip is a single owner-scoped statement
+ * in the data-access layer, so a forged `categoryId` is rejected as "not found"
+ * and no transaction is ever touched or unlinked.
+ */
+export async function setCategoryArchivedAction(
+  _prevState: ArchiveCategoryState,
+  formData: FormData,
+): Promise<ArchiveCategoryState> {
+  const userId = await requireUserId();
+  if (!(await isEmailVerified(userId))) {
+    return { status: "error", message: VERIFY_EMAIL_REQUIRED_MESSAGE };
+  }
+
+  const categoryId = readText(formData.get("categoryId")).trim();
+  const archived = readText(formData.get("archived")) === "true";
+
+  if (categoryId === "") {
+    return { status: "error", message: GENERIC_ARCHIVE_ERROR };
+  }
+
+  const result = await setCategoryArchived(userId, categoryId, archived);
+
+  if (!result.ok) {
+    return { status: "error", message: GENERIC_ARCHIVE_ERROR };
+  }
+
+  // The archive flag changes which categories are offered for new transactions;
+  // historical views keep showing the category name through the join.
+  revalidateCategoryViews();
+  return {
+    status: "success",
+    message: archived
+      ? "دسته‌بندی بایگانی شد. تراکنش‌های قبلی آن همچنان در دسترس‌اند."
+      : "دسته‌بندی از بایگانی خارج شد.",
+  };
 }

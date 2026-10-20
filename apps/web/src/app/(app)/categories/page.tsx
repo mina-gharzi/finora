@@ -20,6 +20,7 @@ async function AuthenticatedCategories() {
         id: category.id,
         name: category.name,
         kind: category.kind as TransactionType,
+        archived: category.archived,
       }))}
     />
   );

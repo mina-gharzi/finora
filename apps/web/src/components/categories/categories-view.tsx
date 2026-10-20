@@ -13,6 +13,7 @@ import { cn } from "@/lib/cn";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/finance/transaction-labels";
 import { TRANSACTION_TYPES, type TransactionType } from "@/lib/finance/types";
 import { CreateCategoryForm } from "./create-category-form";
+import { ArchiveCategoryButton } from "./archive-category-button";
 import { DeleteCategoryButton } from "./delete-category-button";
 import { RenameCategoryForm } from "./rename-category-form";
 
@@ -21,6 +22,7 @@ export interface CategoryItem {
   id: string;
   name: string;
   kind: TransactionType;
+  archived: boolean;
 }
 
 export interface CategoriesViewProps {
@@ -43,8 +45,11 @@ function emptyTitle(kind: TransactionType): string {
 /**
  * Presentational category-management view. It distinguishes income from expense
  * categories with an accessible tab list (`role="tablist"`) and renders the
- * matching list, per-type empty state and management controls. It holds no
- * session or data-fetching concerns so it can be unit tested.
+ * matching list, per-type empty state and management controls. Archived
+ * categories stay visible within their kind — clearly badged and muted, sorted
+ * after the active ones — so historical ownership remains discoverable, but
+ * they can no longer be picked for new transactions. It holds no session or
+ * data-fetching concerns so it can be unit tested.
  */
 export function CategoriesView({ categories }: CategoriesViewProps) {
   const [activeKind, setActiveKind] = useState<TransactionType>("expense");
@@ -53,7 +58,10 @@ export function CategoriesView({ categories }: CategoriesViewProps) {
     income: categories.filter((category) => category.kind === "income"),
     expense: categories.filter((category) => category.kind === "expense"),
   };
-  const visible = byKind[activeKind];
+  // Active categories first; archived ones keep their place at the bottom.
+  const visible = [...byKind[activeKind]].sort(
+    (a, b) => Number(a.archived) - Number(b.archived),
+  );
 
   const handleTabKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -154,17 +162,25 @@ export function CategoriesView({ categories }: CategoriesViewProps) {
             <ul className="flex flex-col gap-3">
               {visible.map((category) => (
                 <li key={category.id}>
-                  <Card>
+                  <Card className={cn(category.archived && "opacity-75")}>
                     <CardContent className="flex flex-col gap-3">
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate font-medium text-foreground">
                           {category.name}
                         </span>
                         <Badge variant={KIND_BADGE[category.kind]}>
                           {TRANSACTION_TYPE_LABELS[category.kind]}
                         </Badge>
+                        {category.archived && (
+                          <Badge variant="warning">بایگانی‌شده</Badge>
+                        )}
                       </div>
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-end">
+                        <ArchiveCategoryButton
+                          categoryId={category.id}
+                          categoryName={category.name}
+                          archived={category.archived}
+                        />
                         <RenameCategoryForm
                           categoryId={category.id}
                           name={category.name}
