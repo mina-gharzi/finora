@@ -3,6 +3,11 @@ import type { Metadata } from "next";
 import { ReportsView } from "@/components/reports/reports-view";
 import { Spinner } from "@/components/ui/spinner";
 import { requireUserId } from "@/lib/dal";
+import {
+  BALANCE_TREND_RANGE_PARAM,
+  parseBalanceTrendRange,
+} from "@/lib/finance/balance-trend";
+import { getBalanceTrendData } from "@/lib/finance/balance-trend-data";
 import { getReportsData } from "@/lib/finance/reports";
 import {
   REPORT_MONTH_OPTIONS,
@@ -45,7 +50,16 @@ async function AuthenticatedReports({
     parseReportsMonthParam(params[REPORTS_MONTH_PARAM], todayIso),
   );
 
-  const data = await getReportsData(userId, month);
+  // The balance window length is separate from the selected report month and
+  // always ends at the current Jalali month; an unknown value falls back safely.
+  const balanceRange = parseBalanceTrendRange(
+    params[BALANCE_TREND_RANGE_PARAM],
+  );
+
+  const [data, balanceTrend] = await Promise.all([
+    getReportsData(userId, month),
+    getBalanceTrendData(userId, todayIso, balanceRange),
+  ]);
 
   // The selector offers recent months (newest first); a crafted URL may
   // select an older month, so ensure it appears in the list too.
@@ -69,6 +83,10 @@ async function AuthenticatedReports({
       trend={data.trend}
       categoryBreakdown={data.categoryBreakdown}
       hasTransactions={data.hasTransactions}
+      balanceRange={balanceTrend.range}
+      balancePoints={balanceTrend.points}
+      balanceCurrent={balanceTrend.currentBalance}
+      hasAccounts={balanceTrend.hasAccounts}
     />
   );
 }

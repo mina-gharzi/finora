@@ -6,6 +6,7 @@ import {
   ArrowUpIcon,
   CategoryIcon,
   ReportsIcon,
+  WalletIcon,
 } from "@/components/icons";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,13 @@ import { Field } from "@/components/ui/field";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/cn";
+import {
+  BALANCE_TREND_RANGE_LABELS,
+  BALANCE_TREND_RANGE_PARAM,
+  BALANCE_TREND_RANGES,
+  type BalanceTrendPoint,
+  type BalanceTrendRange,
+} from "@/lib/finance/balance-trend";
 import type { CategoryExpenseSlice } from "@/lib/finance/dashboard";
 import type {
   MetricChange,
@@ -82,6 +90,14 @@ export interface ReportsViewProps {
   categoryBreakdown: CategoryExpenseSlice[];
   /** Whether the owner has at least one transaction in total. */
   hasTransactions: boolean;
+  /** The selected balance window length, in Jalali months. */
+  balanceRange: BalanceTrendRange;
+  /** Oldest-first tracked-account balance points, ending at the current month. */
+  balancePoints: BalanceTrendPoint[];
+  /** The combined tracked-account balance at the latest plotted month end. */
+  balanceCurrent: number;
+  /** True when the owner has at least one account (even with no transactions). */
+  hasAccounts: boolean;
 }
 
 /**
@@ -110,6 +126,10 @@ export function ReportsView({
   trend,
   categoryBreakdown,
   hasTransactions,
+  balanceRange,
+  balancePoints,
+  balanceCurrent,
+  hasAccounts,
 }: ReportsViewProps) {
   const expenseTotal = categoryBreakdown.reduce(
     (sum, slice) => sum + slice.amount,
@@ -187,6 +207,11 @@ export function ReportsView({
               ))}
             </Select>
           </Field>
+          <input
+            type="hidden"
+            name={BALANCE_TREND_RANGE_PARAM}
+            value={balanceRange}
+          />
           <Button type="submit">نمایش</Button>
         </form>
         <p className="text-xs text-muted-foreground">بازه: {rangeLabel}</p>
@@ -273,6 +298,14 @@ export function ReportsView({
           )}
         </CardContent>
       </Card>
+
+      <BalanceTrendCard
+        range={balanceRange}
+        points={balancePoints}
+        currentBalance={balanceCurrent}
+        hasAccounts={hasAccounts}
+        selectedParam={selectedParam}
+      />
 
       <Card>
         <CardHeader>
@@ -436,5 +469,165 @@ function TrendBar({
         {formatTomanWithUnit(amount)}
       </span>
     </div>
+  );
+}
+
+interface BalanceTrendCardProps {
+  range: BalanceTrendRange;
+  points: BalanceTrendPoint[];
+  currentBalance: number;
+  hasAccounts: boolean;
+  /** Selected report month, carried through the range form to preserve state. */
+  selectedParam: string;
+}
+
+/**
+ * Historical tracked-account balance trend. The title and description state
+ * exactly what is measured (the combined balance of the owner's accounts), and
+ * the footer lists what is included and excluded. Bar widths are decorative
+ * (`aria-hidden`); the month label and exact Toman balance are always visible
+ * text, and a decline is shown with an explicit down arrow and signed delta,
+ * never by colour alone. The empty state explains why there is nothing to plot.
+ */
+function BalanceTrendCard({
+  range,
+  points,
+  currentBalance,
+  hasAccounts,
+  selectedParam,
+}: BalanceTrendCardProps) {
+  // One shared scale so bar widths are comparable across months: the largest
+  // absolute balance in the window (a declining account can be negative).
+  const maxAbs = points.reduce(
+    (max, point) => Math.max(max, Math.abs(point.balance)),
+    0,
+  );
+  const latest = points[points.length - 1];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>روند موجودی حساب‌ها</CardTitle>
+        <CardDescription>
+          موجودی تجمیعی حساب‌های شما در پایان هر ماه (موجودی اولیه به‌همراه
+          مجموع درآمدها منهای هزینه‌ها) در {BALANCE_TREND_RANGE_LABELS[range]}
+          منتهی به {latest ? latest.label : "این ماه"}. این عدد «موجودی تجمیعی
+          حساب‌های ثبت‌شده» است، نه ارزش خالص دارایی‌ها.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <form
+          method="get"
+          action="/reports"
+          className="flex flex-wrap items-end gap-3"
+        >
+          <Field className="w-full sm:w-48">
+            <Label htmlFor="balance-range">بازه روند</Label>
+            <Select
+              id="balance-range"
+              name={BALANCE_TREND_RANGE_PARAM}
+              defaultValue={String(range)}
+            >
+              {BALANCE_TREND_RANGES.map((option) => (
+                <option key={option} value={option}>
+                  {BALANCE_TREND_RANGE_LABELS[option]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <input
+            type="hidden"
+            name={REPORTS_MONTH_PARAM}
+            value={selectedParam}
+          />
+          <Button type="submit">نمایش</Button>
+        </form>
+
+        {!hasAccounts || points.length === 0 ? (
+          <EmptyState
+            icon={<WalletIcon width={24} height={24} />}
+            title="حسابی برای نمایش روند موجودی وجود ندارد"
+            description="با ثبت اولین حساب و تراکنش‌ها، روند موجودی تجمیعی شما در این بخش نمایش داده می‌شود."
+          />
+        ) : (
+          <>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="text-sm text-muted-foreground">
+                موجودی کنونی (پایان آخرین ماه)
+              </span>
+              <span
+                className={cn(
+                  "text-xl font-bold",
+                  currentBalance < 0 ? "text-danger" : "text-foreground",
+                )}
+              >
+                {formatSigned(currentBalance)}
+              </span>
+            </div>
+            <ul className="flex flex-col gap-4">
+              {points.map((point) => (
+                <li key={point.param} className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="font-medium text-foreground">
+                      {point.label}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+                      {point.change !== null && point.change !== 0 && (
+                        <span
+                          className={cn(
+                            "text-xs",
+                            point.change < 0
+                              ? "text-danger"
+                              : "text-success",
+                          )}
+                        >
+                          <span aria-hidden="true">
+                            {point.change < 0 ? (
+                              <ArrowDownIcon className="inline size-3.5" />
+                            ) : (
+                              <ArrowUpIcon className="inline size-3.5" />
+                            )}
+                          </span>{" "}
+                          {formatSigned(point.change)}
+                        </span>
+                      )}
+                      <span
+                        className={cn(
+                          "text-sm font-medium",
+                          point.balance < 0
+                            ? "text-danger"
+                            : "text-foreground",
+                        )}
+                      >
+                        {formatSigned(point.balance)}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-surface-muted">
+                    <div
+                      className={cn(
+                        "h-full rounded-full",
+                        point.balance < 0 ? "bg-danger" : "bg-primary",
+                      )}
+                      style={{
+                        width: `${maxAbs > 0 ? (Math.abs(point.balance) / maxAbs) * 100 : 0}%`,
+                      }}
+                      aria-hidden="true"
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+
+        <p className="text-xs text-muted-foreground">
+          شامل: موجودی اولیه همه حساب‌ها (حتی بایگانی‌شده) و تمام درآمدها و
+          هزینه‌های ثبت‌شده. ناموجود: بدهی‌ها، سرمایه‌گذاری‌ها و دارایی‌های خارج
+          از فینورا؛ موجودی اولیه تاریخ مؤثر ندارد و از نخستین ماه نمایش‌داده‌شده
+          لحاظ شده است.
+        </p>
+      </CardContent>
+    </Card>
   );
 }

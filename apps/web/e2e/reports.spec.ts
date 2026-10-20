@@ -110,10 +110,16 @@ test.describe("financial reports", () => {
     expect(previousValue).not.toBe(currentParam);
 
     await select.selectOption(previousValue as string);
-    await page.getByRole("button", { name: "نمایش" }).click();
+    // Scope to the month form; the balance-range form also has a "نمایش" button.
+    const monthForm = page
+      .locator("form")
+      .filter({ has: page.locator('select[name="month"]') });
+    await monthForm.getByRole("button", { name: "نمایش" }).click();
 
+    // The month form also carries the default balance range, so the URL keeps
+    // both params; the selected month must still be the one requested.
     await expect(page).toHaveURL(
-      new RegExp(`/reports\\?month=${previousValue}$`),
+      new RegExp(`/reports\\?month=${previousValue}&range=\\d+$`),
     );
 
     // The fresh user's only transaction is in the current month, so the

@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { accounts, categories, transactions } from "@/db/schema";
 import { toTomanFromAggregate } from "./money";
@@ -193,6 +193,87 @@ export async function getAccountBalances(
 }
 
 /**
+ * Sum of every account's opening balance for `userId`, or 0 when the owner has
+ * no accounts. Opening balances are unanchored in time ("the balance before any
+ * recorded transaction"), so this single total seeds a historical balance at
+ * every point — see `getAccountBalances` for the same convention.
+ */
+export async function getOpeningBalanceTotal(userId: string): Promise<number> {
+  const [row] = await getDb()
+    .select({
+      total: sql<string | null>`coalesce(sum(${accounts.openingBalance}), 0)`,
+    })
+    .from(accounts)
+    .where(eq(accounts.userId, userId));
+
+  return toTomanFromAggregate(row?.total);
+}
+
+/** Inclusive Gregorian month bounds (`YYYY-MM-DD`) for one history bucket. */
+export interface BalanceMonthBounds {
+  from: string;
+  to: string;
+}
+
+/** Per-month income/expense plus the totals recorded before the window. */
+export interface BalanceHistory {
+  /** Signed net (`income − expense`) of every transaction before the window. */
+  beforeNet: number;
+  /** One entry per requested month, in the same order; nothing is sorted here. */
+  monthly: Array<{ income: number; expense: number; net: number }>;
+}
+
+/**
+ * Cumulative balance material for a historical window, in a single aggregate
+ * query. It returns the signed net recorded **before** the window's first day
+ * plus income/expense for each requested month, so a caller can reconstruct a
+ * running balance at every month boundary without one query per month (no
+ * N+1). Each month is a `case` bucket keyed on its inclusive Gregorian bounds
+ * (exactly the convention `getPeriodTotals` and the reports page use), with a
+ * leading bucket for everything strictly before the window.
+ *
+ * Archived accounts and their transactions are included, matching
+ * `getAccountBalances`: archiving is a lifecycle flag, not a financial event.
+ * Only `income`/`expense` exist in the model, so nothing is double-counted.
+ */
+export async function getBalanceHistory(
+  userId: string,
+  months: readonly BalanceMonthBounds[],
+): Promise<BalanceHistory> {
+  const windowStart = months[0]?.from;
+  if (!windowStart) {
+    return { beforeNet: 0, monthly: [] };
+  }
+
+  const beforeIncome = sql<string | null>`coalesce(sum(case when ${transactions.occurredOn} < ${windowStart} and ${transactions.type} = 'income' then ${transactions.amount} else 0 end), 0)`;
+  const beforeExpense = sql<string | null>`coalesce(sum(case when ${transactions.occurredOn} < ${windowStart} and ${transactions.type} = 'expense' then ${transactions.amount} else 0 end), 0)`;
+
+  const monthlyColumns: Record<string, SQL<string | null>> = {};
+  months.forEach((month, index) => {
+    monthlyColumns[`income${index}`] = sql<string | null>`coalesce(sum(case when ${transactions.occurredOn} >= ${month.from} and ${transactions.occurredOn} <= ${month.to} and ${transactions.type} = 'income' then ${transactions.amount} else 0 end), 0)`;
+    monthlyColumns[`expense${index}`] = sql<string | null>`coalesce(sum(case when ${transactions.occurredOn} >= ${month.from} and ${transactions.occurredOn} <= ${month.to} and ${transactions.type} = 'expense' then ${transactions.amount} else 0 end), 0)`;
+  });
+
+  const [row] = await getDb()
+    .select({ beforeIncome, beforeExpense, ...monthlyColumns })
+    .from(transactions)
+    .where(eq(transactions.userId, userId));
+
+  const record = (row ?? {}) as Record<string, string | null | undefined>;
+  const beforeNet =
+    toTomanFromAggregate(record.beforeIncome) -
+    toTomanFromAggregate(record.beforeExpense);
+
+  const monthly = months.map((_, index) => {
+    const income = toTomanFromAggregate(record[`income${index}`]);
+    const expense = toTomanFromAggregate(record[`expense${index}`]);
+    return { income, expense, net: income - expense };
+  });
+
+  return { beforeNet, monthly };
+}
+
+/**
  * The most recent transactions in the range, newest first, joined to their
  * account and (optional) category names.
  */
@@ -237,6 +318,17 @@ export async function hasAnyTransactions(userId: string): Promise<boolean> {
     .select({ id: transactions.id })
     .from(transactions)
     .where(eq(transactions.userId, userId))
+    .limit(1);
+
+  return Boolean(row);
+}
+
+/** True when the owner has at least one account, ever. */
+export async function hasAnyAccounts(userId: string): Promise<boolean> {
+  const [row] = await getDb()
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(eq(accounts.userId, userId))
     .limit(1);
 
   return Boolean(row);

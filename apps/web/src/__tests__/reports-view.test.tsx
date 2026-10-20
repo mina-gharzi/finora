@@ -75,6 +75,17 @@ const BASE_PROPS: ReportsViewProps = {
     { categoryId: null, categoryName: null, amount: 50_000 },
   ],
   hasTransactions: true,
+  balanceRange: 6,
+  balancePoints: [
+    { param: "1405-02", label: "اردیبهشت 1405", shortLabel: "اردیبهشت", balance: 2_000_000, income: 500_000, expense: 100_000, net: 400_000, change: null },
+    { param: "1405-03", label: "خرداد 1405", shortLabel: "خرداد", balance: 2_450_000, income: 600_000, expense: 150_000, net: 450_000, change: 450_000 },
+    { param: "1405-04", label: "تیر 1405", shortLabel: "تیر", balance: 2_950_000, income: 700_000, expense: 200_000, net: 500_000, change: 500_000 },
+    { param: "1405-05", label: "مرداد 1405", shortLabel: "مرداد", balance: 3_530_000, income: 800_000, expense: 220_000, net: 580_000, change: 580_000 },
+    { param: "1405-06", label: "شهریور 1405", shortLabel: "شهریور", balance: 4_080_000, income: 800_000, expense: 250_000, net: 550_000, change: 550_000 },
+    { param: "1405-07", label: "مهر 1405", shortLabel: "مهر", balance: 4_750_000, income: 1_000_000, expense: 250_000, net: 750_000, change: 670_000 },
+  ],
+  balanceCurrent: 4_750_000,
+  hasAccounts: true,
 };
 
 function renderView(overrides: Partial<ReportsViewProps> = {}) {
@@ -403,5 +414,75 @@ describe("ReportsView — disclosure footer", () => {
 
     const allLink = screen.getByRole("link", { name: "مشاهده همه تراکنش‌ها" });
     expect(allLink.getAttribute("href")).toBe("/transactions");
+  });
+});
+
+describe("ReportsView — balance trend", () => {
+  it("names the metric honestly and states what is included and excluded", () => {
+    renderView();
+
+    expect(screen.getByText("روند موجودی حساب‌ها")).toBeTruthy();
+    // Never claims full net worth.
+    expect(
+      screen.getByText(/نه ارزش خالص دارایی‌ها/),
+    ).toBeTruthy();
+    expect(screen.getByText(/شامل: موجودی اولیه همه حساب‌ها/)).toBeTruthy();
+    expect(screen.getByText(/ناموجود: بدهی‌ها، سرمایه‌گذاری‌ها/)).toBeTruthy();
+  });
+
+  it("lists every month's balance as visible signed text", () => {
+    renderView();
+
+    // Balance values are formatted with an explicit + sign and the Toman unit.
+    expect(screen.getByText("+2,000,000 تومان")).toBeTruthy();
+    // The latest month's balance is shown both as a row and in the highlight.
+    expect(screen.getAllByText("+4,750,000 تومان").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows the range selector as a GET form preserving the month", () => {
+    renderView();
+
+    const select = screen.getByLabelText("بازه روند") as HTMLSelectElement;
+    expect(select.getAttribute("name")).toBe("range");
+    expect(select.value).toBe("6");
+
+    const form = select.closest("form");
+    expect(form?.getAttribute("method")).toBe("get");
+    expect(form?.getAttribute("action")).toBe("/reports");
+    const hiddenMonth = form?.querySelector('input[name="month"]');
+    expect(hiddenMonth).toBeTruthy();
+
+    const options = within(select).getAllByRole("option");
+    expect(options.map((option) => option.textContent)).toEqual([
+      "۶ ماه",
+      "۱۲ ماه",
+      "۲۴ ماه",
+    ]);
+  });
+
+  it("marks a declining balance with an explicit minus and a down arrow", () => {
+    renderView({
+      balancePoints: [
+        { param: "1405-06", label: "شهریور 1405", shortLabel: "شهریور", balance: 500_000, income: 0, expense: 0, net: 0, change: null },
+        { param: "1405-07", label: "مهر 1405", shortLabel: "مهر", balance: -200_000, income: 0, expense: 700_000, net: -700_000, change: -700_000 },
+      ],
+      balanceCurrent: -200_000,
+    });
+
+    // Negative balance is rendered with the Unicode minus sign.
+    expect(screen.getAllByText(`${MINUS}200,000 تومان`).length).toBeGreaterThanOrEqual(2);
+    // The decline is also shown as a signed change.
+    expect(screen.getByText(`${MINUS}700,000 تومان`)).toBeTruthy();
+  });
+
+  it("shows an empty state when the owner has no accounts", () => {
+    renderView({ hasAccounts: false, balancePoints: [] });
+
+    expect(
+      screen.getByRole("heading", {
+        level: 2,
+        name: "حسابی برای نمایش روند موجودی وجود ندارد",
+      }),
+    ).toBeTruthy();
   });
 });

@@ -27,9 +27,12 @@ vi.mock("@/db", async () => {
 import {
   DASHBOARD_RECENT_LIMIT,
   getAccountBalances,
+  getBalanceHistory,
   getCategoryExpenseBreakdown,
   getDashboardData,
+  getOpeningBalanceTotal,
   getPeriodTotals,
+  hasAnyAccounts,
   hasAnyTransactions,
   listRecentTransactions,
 } from "@/lib/finance/dashboard";
@@ -400,5 +403,134 @@ describe("getDashboardData", () => {
     const data = await getDashboardData(OWNER, { from: null, to: null });
     expect(data.hasAccounts).toBe(true);
     expect(data.hasTransactions).toBe(false);
+  });
+});
+
+describe("getOpeningBalanceTotal", () => {
+  it("sums opening balances across accounts", async () => {
+    h.state.selectQueue = [[{ total: "350000" }]];
+    await expect(getOpeningBalanceTotal(OWNER)).resolves.toBe(350000);
+  });
+
+  it("treats a missing aggregate (no accounts) as zero", async () => {
+    h.state.selectQueue = [[{ total: null }]];
+    await expect(getOpeningBalanceTotal(OWNER)).resolves.toBe(0);
+  });
+
+  it("scopes the query to the session owner", async () => {
+    h.state.selectQueue = [[{ total: "0" }]];
+
+    await getOpeningBalanceTotal(OWNER);
+
+    const { sql, params } = serialize(lastWhere());
+    expect(sql).toContain("user_id");
+    expect(params).toContain(OWNER);
+  });
+});
+
+describe("hasAnyAccounts", () => {
+  it("is true when at least one account exists", async () => {
+    h.state.selectQueue = [[{ id: "acc-1" }]];
+    await expect(hasAnyAccounts(OWNER)).resolves.toBe(true);
+  });
+
+  it("is false when the owner has no accounts", async () => {
+    h.state.selectQueue = [[]];
+    await expect(hasAnyAccounts(OWNER)).resolves.toBe(false);
+  });
+
+  it("scopes the probe to the session owner", async () => {
+    h.state.selectQueue = [[]];
+
+    await hasAnyAccounts(OWNER);
+
+    const { sql, params } = serialize(lastWhere());
+    expect(sql).toContain("user_id");
+    expect(params).toContain(OWNER);
+  });
+});
+
+describe("getBalanceHistory", () => {
+  const MONTHS = [
+    { from: "2026-08-23", to: "2026-09-22" }, // شهریور
+    { from: "2026-09-23", to: "2026-10-22" }, // مهر
+  ];
+
+  it("returns the pre-window net and per-month income/expense", async () => {
+    h.state.selectQueue = [
+      [
+        {
+          beforeIncome: "400000",
+          beforeExpense: "100000",
+          income0: "50000",
+          expense0: "20000",
+          income1: "300000",
+          expense1: "120000",
+        },
+      ],
+    ];
+
+    const history = await getBalanceHistory(OWNER, MONTHS);
+
+    expect(history.beforeNet).toBe(300000);
+    expect(history.monthly).toEqual([
+      { income: 50000, expense: 20000, net: 30000 },
+      { income: 300000, expense: 120000, net: 180000 },
+    ]);
+  });
+
+  it("yields zero months and zero before-net when there is no activity", async () => {
+    h.state.selectQueue = [
+      [
+        {
+          beforeIncome: null,
+          beforeExpense: null,
+          income0: null,
+          expense0: null,
+          income1: null,
+          expense1: null,
+        },
+      ],
+    ];
+
+    const history = await getBalanceHistory(OWNER, MONTHS);
+
+    expect(history.beforeNet).toBe(0);
+    expect(history.monthly).toEqual([
+      { income: 0, expense: 0, net: 0 },
+      { income: 0, expense: 0, net: 0 },
+    ]);
+  });
+
+  it("issues a single owner-scoped query regardless of window length", async () => {
+    h.state.selectQueue = [
+      [
+        {
+          beforeIncome: "0",
+          beforeExpense: "0",
+          income0: "0",
+          expense0: "0",
+          income1: "0",
+          expense1: "0",
+          income2: "0",
+          expense2: "0",
+        },
+      ],
+    ];
+
+    await getBalanceHistory(OWNER, [...MONTHS, { from: "2026-06-22", to: "2026-07-22" }]);
+
+    // One query only: no per-month round trip.
+    expect(h.state.whereConditions).toHaveLength(1);
+    const { sql, params } = serialize(lastWhere());
+    expect(sql).toContain("user_id");
+    expect(params).toContain(OWNER);
+  });
+
+  it("returns an empty history for an empty window without querying", async () => {
+    const history = await getBalanceHistory(OWNER, []);
+
+    expect(history).toEqual({ beforeNet: 0, monthly: [] });
+    expect(h.state.whereConditions).toHaveLength(0);
   });
 });
