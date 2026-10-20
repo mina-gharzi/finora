@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AUTH_TOKEN_PURPOSES,
+  EMAIL_CHANGE_TTL_MS,
   EMAIL_VERIFY_TTL_MS,
   generateAuthToken,
   hashAuthToken,
@@ -48,12 +49,18 @@ describe("auth token hashing", () => {
 });
 
 describe("auth token expiry", () => {
-  it("uses one day for verification and one hour for reset", () => {
+  it("uses one day for verification, one hour for reset and change", () => {
     expect(EMAIL_VERIFY_TTL_MS).toBe(24 * 60 * 60 * 1000);
     expect(PASSWORD_RESET_TTL_MS).toBe(60 * 60 * 1000);
+    expect(EMAIL_CHANGE_TTL_MS).toBe(60 * 60 * 1000);
     expect(tokenTtlMs("email_verify")).toBe(EMAIL_VERIFY_TTL_MS);
     expect(tokenTtlMs("password_reset")).toBe(PASSWORD_RESET_TTL_MS);
-    expect(AUTH_TOKEN_PURPOSES).toEqual(["email_verify", "password_reset"]);
+    expect(tokenTtlMs("email_change")).toBe(EMAIL_CHANGE_TTL_MS);
+    expect(AUTH_TOKEN_PURPOSES).toEqual([
+      "email_verify",
+      "password_reset",
+      "email_change",
+    ]);
   });
 
   it("computes the expiry from the supplied clock", () => {
@@ -63,6 +70,9 @@ describe("auth token expiry", () => {
     );
     expect(authTokenExpiry("email_verify", now).getTime()).toBe(
       now + EMAIL_VERIFY_TTL_MS,
+    );
+    expect(authTokenExpiry("email_change", now).getTime()).toBe(
+      now + EMAIL_CHANGE_TTL_MS,
     );
   });
 });

@@ -22,6 +22,13 @@
       "when": 1792402714437,
       "tag": "0002_lean_shiva",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792498562870,
+      "tag": "0003_broad_beyonder",
+      "breakpoints": true
     }
   ]
 }

@@ -76,6 +76,15 @@ export const verifyEmailSchema = z.object({
 });
 
 /**
+ * Email-change request: the address format is the only shape rule here —
+ * existence and "same as current" checks need the session-backed account and
+ * therefore live in the action.
+ */
+export const changeEmailSchema = z.object({
+  email: emailSchema,
+});
+
+/**
  * In-session password change: the current password must be re-proven before
  * the new one applies; `confirm` is compared against `password` only after
  * both pass the password policy, so mismatch errors never mask policy errors.
@@ -103,6 +112,7 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type ChangeEmailInput = z.infer<typeof changeEmailSchema>;
 
 /** Flattens a Zod error into a `{ field: firstMessage }` map for form display. */
 export function toFieldErrors(error: z.ZodError): Record<string, string> {

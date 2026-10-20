@@ -26,4 +26,8 @@ export const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password"] as cons
  * both anonymous and signed-in visitors (a reset link may be opened in any
  * browser). Neither redirect rule applies to them.
  */
-export const TOKEN_ROUTES = ["/verify-email", "/reset-password"] as const;
+export const TOKEN_ROUTES = [
+  "/verify-email",
+  "/reset-password",
+  "/change-email",
+] as const;

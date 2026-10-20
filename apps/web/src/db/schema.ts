@@ -39,13 +39,22 @@ export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
 
 /**
- * Single-use, purpose-bound tokens for email verification and password reset.
+ * Single-use, purpose-bound tokens for email verification, password reset and
+ * email change.
  *
  * Only the SHA-256 hash of a token is stored, so a database leak does not
  * yield usable links. A token is consumed by a conditional UPDATE that sets
  * `consumed_at`, which makes concurrent use impossible (exactly one statement
  * wins). `purpose` prevents a reset token from verifying an email and vice
  * versa. Deleting a user cascades their tokens away.
+ *
+ * `target_email` carries the pending address an `email_change` token will
+ * apply: the raw token is unreadable by design, so the bound destination has
+ * to live somewhere the completion can look it up. One nullable column on the
+ * existing table is the smallest robust design — no new table, no join, and
+ * the paired CHECK keeps the column meaningful: it is NOT NULL exactly for
+ * `email_change` rows and NULL for every other purpose (also constraining
+ * older rows, which all predate the column and are NULL).
  */
 export const authTokens = pgTable(
   "auth_tokens",
@@ -54,6 +63,7 @@ export const authTokens = pgTable(
     userId: ownerUserId(),
     purpose: text("purpose").notNull(),
     tokenHash: text("token_hash").notNull(),
+    targetEmail: text("target_email"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     consumedAt: timestamp("consumed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -63,7 +73,11 @@ export const authTokens = pgTable(
   (table) => [
     check(
       "auth_tokens_purpose_check",
-      sql`${table.purpose} in ('email_verify', 'password_reset')`,
+      sql`${table.purpose} in ('email_verify', 'password_reset', 'email_change')`,
+    ),
+    check(
+      "auth_tokens_target_email_check",
+      sql`(${table.purpose} = 'email_change') = (${table.targetEmail} is not null)`,
     ),
     // Lookups always arrive by raw token, hashed then matched exactly.
     uniqueIndex("auth_tokens_token_hash_idx").on(table.tokenHash),

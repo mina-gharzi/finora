@@ -40,6 +40,10 @@ export function passwordResetLink(baseUrl: string, rawToken: string): string {
   return buildLink(baseUrl, "/reset-password", rawToken);
 }
 
+export function emailChangeLink(baseUrl: string, rawToken: string): string {
+  return buildLink(baseUrl, "/change-email", rawToken);
+}
+
 /**
  * Wraps body copy in a minimal RTL HTML shell. Deliberately plain: no remote
  * images or styles, so nothing phones home when the email is rendered.
@@ -101,6 +105,43 @@ export function buildPasswordResetEmail(input: {
       "<p>درخواست بازیابی گذرواژه برای حساب شما ثبت شده است. برای تعیین گذرواژه جدید روی پیوند زیر کلیک کنید:</p>",
       `<p><a href="${escapeHtml(link)}">تغییر گذرواژه</a></p>`,
       '<p style="color:#666;font-size:12px">این پیوند ۱ ساعت معتبر است و فقط یک بار قابل استفاده است. اگر شما این درخواست را ثبت نکرده‌اید، این ایمیل را نادیده بگیرید؛ گذرواژه شما تغییری نکرده است.</p>',
+    ]),
+  };
+}
+
+/**
+ * Sent to the NEW (pending) address, not the current one: opening the link
+ * is what proves control of the destination before the account adopts it.
+ * The copy states explicitly that the link changes the email address
+ * associated with the Finora account.
+ */
+export function buildEmailChangeEmail(input: {
+  to: string;
+  name: string;
+  baseUrl: string;
+  rawToken: string;
+}): OutboundEmail {
+  const link = emailChangeLink(input.baseUrl, input.rawToken);
+  const greeting = escapeHtml(input.name);
+  const disclaimer =
+    "این پیوند ۱ ساعت معتبر است و فقط یک بار قابل استفاده است. " +
+    "اگر شما این درخواست را ثبت نکرده‌اید، این ایمیل را نادیده بگیرید؛ ایمیل حساب شما تغییری نکرده است.";
+  return {
+    to: input.to,
+    subject: "تأیید تغییر ایمیل — فینورا",
+    text:
+      `سلام ${input.name}،\n\n` +
+      "درخواست شما برای تغییر ایمیل حساب فینورا ثبت شده است. " +
+      "برای تأیید و اعمال تغییر روی پیوند زیر کلیک کنید:\n" +
+      `${link}\n\n` +
+      "با باز کردن این پیوند، ایمیل مرتبط با حساب فینورا شما به همین نشانی تغییر می‌کند. " +
+      `${disclaimer}\n`,
+    html: shell("تأیید تغییر ایمیل — فینورا", [
+      `<p>سلام ${greeting}،</p>`,
+      "<p>درخواست شما برای تغییر ایمیل حساب فینورا ثبت شده است. برای تأیید و اعمال تغییر روی پیوند زیر کلیک کنید:</p>",
+      `<p><a href="${escapeHtml(link)}">تأیید تغییر ایمیل</a></p>`,
+      "<p>با باز کردن این پیوند، ایمیل مرتبط با حساب فینورا شما به همین نشانی تغییر می‌کند.</p>",
+      `<p style="color:#666;font-size:12px">${escapeHtml(disclaimer)}</p>`,
     ]),
   };
 }

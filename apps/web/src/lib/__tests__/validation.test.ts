@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  changeEmailSchema,
   emailSchema,
   loginSchema,
   nameSchema,
@@ -118,5 +119,35 @@ describe("loginSchema length cap", () => {
       loginSchema.safeParse({ email: "a@b.com", password: "x".repeat(257) })
         .success,
     ).toBe(false);
+  });
+});
+
+describe("changeEmailSchema", () => {
+  it("normalizes a valid address exactly like registration does", () => {
+    expect(changeEmailSchema.parse({ email: " New@Example.COM " })).toEqual({
+      email: "new@example.com",
+    });
+  });
+
+  it("rejects malformed and empty addresses with Persian messages", () => {
+    const malformed = changeEmailSchema.safeParse({ email: "not-an-email" });
+    expect(malformed.success).toBe(false);
+    if (!malformed.success) {
+      expect(toFieldErrors(malformed.error).email).toBe("ایمیل معتبر نیست.");
+    }
+
+    const empty = changeEmailSchema.safeParse({ email: "" });
+    expect(empty.success).toBe(false);
+    if (!empty.success) {
+      expect(toFieldErrors(empty.error).email).toBe("ایمیل معتبر نیست.");
+    }
+  });
+
+  it("asks for the email when the field is missing entirely", () => {
+    const missing = changeEmailSchema.safeParse({});
+    expect(missing.success).toBe(false);
+    if (!missing.success) {
+      expect(toFieldErrors(missing.error).email).toBe("ایمیل را وارد کنید.");
+    }
   });
 });

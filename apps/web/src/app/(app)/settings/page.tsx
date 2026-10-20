@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { ChangeEmailForm } from "./change-email-form";
 import { ChangePasswordForm } from "./change-password-form";
 import {
   Card,
@@ -41,6 +42,20 @@ async function AuthenticatedSettings() {
         </CardHeader>
         <CardContent>
           <ChangePasswordForm />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>تغییر ایمیل</CardTitle>
+          <CardDescription>
+            ایمیل فعلی: {user.email}. نشانی جدید تنها پس از تأیید از طریق پیوند
+            ارسال‌شده به همان نشانی جایگزین می‌شود؛ تا آن زمان ایمیل حساب
+            تغییری نمی‌کند.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChangeEmailForm />
         </CardContent>
       </Card>
     </div>

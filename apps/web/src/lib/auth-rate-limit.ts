@@ -27,6 +27,10 @@ interface AuthLimiters {
   resendUser: RateLimiter;
   /** Verification resends per client address. */
   resendIp: RateLimiter;
+  /** Email-change requests per signed-in user. */
+  changeEmailUser: RateLimiter;
+  /** Email-change requests per client address. */
+  changeEmailIp: RateLimiter;
 }
 
 const globalForLimiters = globalThis as unknown as {
@@ -44,6 +48,11 @@ export function getAuthLimiters(): AuthLimiters {
       tokenIp: createRateLimiter({ limit: 20, windowMs: FIFTEEN_MINUTES }),
       resendUser: createRateLimiter({ limit: 3, windowMs: ONE_HOUR }),
       resendIp: createRateLimiter({ limit: 10, windowMs: ONE_HOUR }),
+      // Mirrors the resend policy: an authenticated user can still mail a
+      // handful of addresses per hour, but cannot be scripted to bombard
+      // arbitrary inboxes with change links.
+      changeEmailUser: createRateLimiter({ limit: 3, windowMs: ONE_HOUR }),
+      changeEmailIp: createRateLimiter({ limit: 10, windowMs: ONE_HOUR }),
     };
   }
   return globalForLimiters.finoraAuthLimiters;

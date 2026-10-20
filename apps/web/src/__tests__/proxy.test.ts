@@ -97,7 +97,11 @@ describe("proxy route guard", () => {
   });
 
   it("lets anonymous visitors open token pages (token itself is the credential)", async () => {
-    for (const path of ["/verify-email?token=abc", "/reset-password?token=abc"]) {
+    for (const path of [
+      "/verify-email?token=abc",
+      "/reset-password?token=abc",
+      "/change-email?token=abc",
+    ]) {
       const response = await run(path);
       expect(response.headers.get("x-middleware-next")).toBe("1");
       expect(response.headers.get("location")).toBeNull();
@@ -106,7 +110,11 @@ describe("proxy route guard", () => {
 
   it("keeps token pages reachable for signed-in users too (resend/verify while browsing)", async () => {
     const token = await signSessionToken("user-1", STRONG_SECRET);
-    for (const path of ["/verify-email?token=abc", "/reset-password?token=abc"]) {
+    for (const path of [
+      "/verify-email?token=abc",
+      "/reset-password?token=abc",
+      "/change-email?token=abc",
+    ]) {
       const response = await run(path, await cookieHeader(token));
       expect(response.headers.get("x-middleware-next")).toBe("1");
       expect(response.headers.get("location")).toBeNull();

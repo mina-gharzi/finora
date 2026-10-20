@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getAppUrl, isProduction } from "@/lib/env";
 import {
+  buildEmailChangeEmail,
   buildPasswordResetEmail,
   buildVerificationEmail,
   type OutboundEmail,
@@ -285,5 +286,19 @@ export async function sendPasswordResetEmail(input: {
 }): Promise<"sent" | "unavailable"> {
   return sendOrClassify(
     buildPasswordResetEmail({ ...input, baseUrl: getAppUrl() }),
+  );
+}
+
+/**
+ * Delivers the email-change confirmation link to the NEW address (the
+ * pending destination — not the account's current one).
+ */
+export async function sendEmailChangeEmail(input: {
+  to: string;
+  name: string;
+  rawToken: string;
+}): Promise<"sent" | "unavailable"> {
+  return sendOrClassify(
+    buildEmailChangeEmail({ ...input, baseUrl: getAppUrl() }),
   );
 }

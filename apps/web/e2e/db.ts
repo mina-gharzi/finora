@@ -51,17 +51,32 @@ export async function markEmailUnverified(email: string): Promise<void> {
 /**
  * Inserts a purpose-bound auth token exactly the way the server stores it:
  * SHA-256 hash of the raw token, fixed expiry window, unconsumed.
+ *
+ * `email_change` rows must carry `targetEmail` — the same NOT NULL/parity
+ * constraint the production table enforces (a CHECK requires exactly those
+ * rows to have a destination).
  */
 export async function mintAuthToken(input: {
   email: string;
-  purpose: "email_verify" | "password_reset";
+  purpose: "email_verify" | "password_reset" | "email_change";
   rawToken: string;
+  /** Destination for `email_change` tokens (required by the table CHECK). */
+  targetEmail?: string;
   expiresAt?: Date;
 }): Promise<void> {
   const { email, purpose, rawToken } = input;
   const expiresAt =
     input.expiresAt ??
     new Date(Date.now() + (purpose === "email_verify" ? 24 : 1) * 3_600_000);
+  const targetEmail = input.targetEmail ?? null;
+  if (purpose === "email_change" && !targetEmail) {
+    throw new Error("mintAuthToken(email_change) requires targetEmail");
+  }
+  if (purpose !== "email_change" && targetEmail) {
+    throw new Error(
+      `mintAuthToken(${purpose}) must not set targetEmail (table CHECK forbids it)`,
+    );
+  }
   const { createHash } = await import("node:crypto");
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
 
@@ -80,9 +95,9 @@ export async function mintAuthToken(input: {
       [userId, purpose],
     );
     await client.query(
-      `INSERT INTO auth_tokens (id, user_id, purpose, token_hash, expires_at)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4)`,
-      [userId, purpose, tokenHash, expiresAt],
+      `INSERT INTO auth_tokens (id, user_id, purpose, token_hash, target_email, expires_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)`,
+      [userId, purpose, tokenHash, targetEmail, expiresAt],
     );
   });
 }
