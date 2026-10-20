@@ -116,6 +116,29 @@ describe("requireUserId", () => {
     await expect(requireUserId()).resolves.toBe("user-2");
     expect(mocks.redirect).not.toHaveBeenCalled();
   });
+
+  it("redirects a watermark-revoked session to the marked login page", async () => {
+    // A revoked cookie still passes the proxy's signature check, so it must
+    // land on a login URL the proxy does not bounce back to the app —
+    // otherwise the browser loops between the two guards forever.
+    mocks.cookieToken = await signSessionToken("user-r3", SECRET);
+    mocks.findUserAuthValidAfter.mockResolvedValue({
+      authValidAfter: new Date(Date.now() + 60_000),
+    });
+    await expect(requireUserId()).rejects.toThrow(
+      "NEXT_REDIRECT:/login?session=expired",
+    );
+    expect(mocks.redirect).toHaveBeenCalledWith("/login?session=expired");
+  });
+
+  it("treats a live cookie for a deleted account as revoked, not anonymous", async () => {
+    mocks.cookieToken = await signSessionToken("user-gone2", SECRET);
+    mocks.findUserAuthValidAfter.mockResolvedValue(null);
+    await expect(requireUserId()).rejects.toThrow(
+      "NEXT_REDIRECT:/login?session=expired",
+    );
+    expect(mocks.redirect).toHaveBeenCalledWith("/login?session=expired");
+  });
 });
 
 describe("isEmailVerified", () => {

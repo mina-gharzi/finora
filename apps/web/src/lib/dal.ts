@@ -14,14 +14,28 @@ import {
  * single render pass.
  */
 
-/** The verified user id for this request, or null when not signed in. */
-export const getSessionUserId = cache(async (): Promise<string | null> => {
+/** Outcome of a single session resolution for the current request. */
+type SessionResolution =
+  | { status: "anonymous" }
+  | { status: "invalidated" }
+  | { status: "ok"; userId: string };
+
+/**
+ * Resolves the session once per request scope, distinguishing "no usable
+ * session" from "a cryptographically valid session the watermark has
+ * revoked". The two cases need different login redirects: bouncing a revoked
+ * but signed cookie straight to `/login` would loop with the proxy's
+ * public-route guard (proxy.ts sends signed cookies away from the auth
+ * pages, the DAL would send it back), so revoked sessions land on
+ * `/login?session=expired`, which the proxy lets through.
+ */
+const resolveSession = cache(async (): Promise<SessionResolution> => {
   const auth = await getSessionAuth();
   if (!auth) {
-    return null;
+    return { status: "anonymous" };
   }
 
-  // Session-invalidation watermark: a password reset bumps
+  // Session-invalidation watermark: a password reset or change bumps
   // `auth_valid_after`, and any token issued strictly before it (by JWT
   // `iat`) must stop authenticating even though the signature is still
   // cryptographically valid. Tokens issued in the same second as the reset
@@ -29,21 +43,29 @@ export const getSessionUserId = cache(async (): Promise<string | null> => {
   const gate = await findUserAuthValidAfter(auth.userId);
   if (!gate) {
     // The account was deleted while the cookie was still alive.
-    return null;
+    return { status: "invalidated" };
   }
   if (gate.authValidAfter && auth.issuedAt * 1000 < gate.authValidAfter.getTime()) {
-    return null;
+    return { status: "invalidated" };
   }
-  return auth.userId;
+  return { status: "ok", userId: auth.userId };
+});
+
+/** The verified user id for this request, or null when not signed in. */
+export const getSessionUserId = cache(async (): Promise<string | null> => {
+  const resolution = await resolveSession();
+  return resolution.status === "ok" ? resolution.userId : null;
 });
 
 /** The verified user id, redirecting to the login page when absent. */
 export const requireUserId = cache(async (): Promise<string> => {
-  const userId = await getSessionUserId();
-  if (!userId) {
-    redirect("/login");
+  const resolution = await resolveSession();
+  if (resolution.status === "ok") {
+    return resolution.userId;
   }
-  return userId;
+  redirect(
+    resolution.status === "invalidated" ? "/login?session=expired" : "/login",
+  );
 });
 
 /**

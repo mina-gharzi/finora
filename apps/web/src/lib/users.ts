@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
 
@@ -34,6 +34,24 @@ export async function findUserByEmail(
     })
     .from(users)
     .where(eq(users.email, email))
+    .limit(1);
+
+  return row ?? null;
+}
+
+/** Returns login credentials for a user id, or null. */
+export async function findUserCredentialsById(
+  id: string,
+): Promise<UserCredentials | null> {
+  const [row] = await getDb()
+    .select({
+      id: users.id,
+      name: users.name,
+      passwordHash: users.passwordHash,
+      emailVerifiedAt: users.emailVerifiedAt,
+    })
+    .from(users)
+    .where(eq(users.id, id))
     .limit(1);
 
   return row ?? null;
@@ -113,15 +131,24 @@ export async function markEmailVerified(id: string): Promise<void> {
 }
 
 /**
- * Replaces a user's password hash and raises the session-invalidation
- * watermark to now, killing every session token issued earlier.
+ * Replaces a user's password hash only while it still equals
+ * `expectedHash` (compare-and-swap: a concurrent change from another
+ * tab/device wins and this call reports `false` instead of overwriting it).
+ * The paired `authValidAfter` bump raises the session-invalidation watermark
+ * in the same statement, so every token issued earlier — including this
+ * request's own session — stops authenticating. Returns whether a row was
+ * updated.
  */
-export async function updateUserPassword(
+export async function updateUserPasswordIfCurrent(
   id: string,
+  expectedHash: string,
   passwordHash: string,
-): Promise<void> {
-  await getDb()
+): Promise<boolean> {
+  const rows = await getDb()
     .update(users)
     .set({ passwordHash, authValidAfter: sql`now()` })
-    .where(eq(users.id, id));
+    .where(and(eq(users.id, id), eq(users.passwordHash, expectedHash)))
+    .returning({ id: users.id });
+
+  return rows.length > 0;
 }

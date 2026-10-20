@@ -20,10 +20,9 @@ export interface NavEntry {
 /**
  * Navigation for the application shell.
  *
- * Dashboard, transactions, accounts, categories and reports are real
- * destinations. Budgets and settings are intentionally disabled placeholders
- * so the shell is demonstrated without implying that those financial features
- * already exist.
+ * Dashboard, transactions, accounts, categories, reports and settings are real
+ * destinations. Budgets is intentionally a disabled placeholder so the shell is
+ * demonstrated without implying that the financial feature already exists.
  */
 export const navGroups: { title: string; items: NavEntry[] }[] = [
   {
@@ -70,7 +69,7 @@ export const navGroups: { title: string; items: NavEntry[] }[] = [
   {
     title: "سیستم",
     items: [
-      { key: "settings", label: "تنظیمات", icon: <SettingsIcon />, disabled: true },
+      { key: "settings", label: "تنظیمات", href: "/settings", icon: <SettingsIcon /> },
     ],
   },
 ];

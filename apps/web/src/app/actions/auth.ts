@@ -6,6 +6,7 @@ import { sendInitialVerificationEmail } from "@/app/actions/account-recovery";
 import type { AuthFormState } from "@/lib/auth-form";
 import { getAuthLimiters } from "@/lib/auth-rate-limit";
 import { getClientIp } from "@/lib/client-ip";
+import { requireUserId } from "@/lib/dal";
 import { isUniqueViolation } from "@/lib/db-errors";
 import {
   DUMMY_PASSWORD_HASH,
@@ -14,8 +15,18 @@ import {
 } from "@/lib/password";
 import { tooManyAttemptsMessage } from "@/lib/rate-limit";
 import { createSession, deleteSession } from "@/lib/session";
-import { createUser, findUserByEmail } from "@/lib/users";
-import { loginSchema, registerSchema, toFieldErrors } from "@/lib/validation";
+import {
+  createUser,
+  findUserByEmail,
+  findUserCredentialsById,
+  updateUserPasswordIfCurrent,
+} from "@/lib/users";
+import {
+  changePasswordSchema,
+  loginSchema,
+  registerSchema,
+  toFieldErrors,
+} from "@/lib/validation";
 
 export async function registerAction(
   _prevState: AuthFormState,
@@ -120,4 +131,65 @@ export async function loginAction(
 export async function logoutAction(): Promise<void> {
   await deleteSession();
   redirect("/login");
+}
+
+/**
+ * In-session password change. The identity comes from the session (never
+ * from the form), the CURRENT password is re-proven server-side against the
+ * stored hash, and the update is a compare-and-swap so a concurrent change
+ * cannot be silently overwritten.
+ *
+ * On success the update also raises the session-invalidation watermark, so
+ * every previously issued token — other tabs, other devices, and this
+ * browser's own cookie — stops authenticating at the DAL gate. This session
+ * is cleared explicitly and the user is sent to sign in again with the new
+ * password, matching the password-reset flow's "all sessions end" semantics.
+ */
+export async function changePasswordAction(
+  _prevState: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const userId = await requireUserId();
+
+  const parsed = changePasswordSchema.safeParse({
+    current: formData.get("current"),
+    password: formData.get("password"),
+    confirm: formData.get("confirm"),
+  });
+
+  if (!parsed.success) {
+    return { fieldErrors: toFieldErrors(parsed.error) };
+  }
+
+  const user = await findUserCredentialsById(userId);
+  if (!user) {
+    // The account disappeared while the cookie was still alive.
+    await deleteSession();
+    redirect("/login");
+  }
+
+  const isCurrentValid = await verifyPassword(
+    parsed.data.current,
+    user.passwordHash,
+  );
+  if (!isCurrentValid) {
+    return { fieldErrors: { current: "گذرواژه فعلی نادرست است." } };
+  }
+
+  const passwordHash = await hashPassword(parsed.data.password);
+  const updated = await updateUserPasswordIfCurrent(
+    userId,
+    user.passwordHash,
+    passwordHash,
+  );
+  if (!updated) {
+    // The stored hash changed between the verification and the write: the
+    // form's "current" password is stale, so the change must not apply.
+    return {
+      message: "گذرواژه فعلی دیگر معتبر نیست. لطفاً دوباره تلاش کنید.",
+    };
+  }
+
+  await deleteSession();
+  redirect("/login?passwordChanged=1");
 }

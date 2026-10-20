@@ -39,7 +39,13 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (isPublicRoute && userId) {
+  // Signed-in users are kept off the auth pages — EXCEPT when the login page
+  // is the explicitly marked destination for a session the DAL revoked
+  // (`?session=expired`). Those cookies still pass this signature check but
+  // fail the DAL watermark, so bouncing them back to `/` would loop forever.
+  const revokedSessionLanding =
+    userId && request.nextUrl.searchParams.get("session") === "expired";
+  if (isPublicRoute && userId && !revokedSessionLanding) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

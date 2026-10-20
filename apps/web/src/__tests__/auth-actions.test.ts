@@ -5,10 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findUserByEmail: vi.fn(),
+  findUserCredentialsById: vi.fn(),
+  updateUserPasswordIfCurrent: vi.fn(),
   createUser: vi.fn(),
+  requireUserId: vi.fn(async () => "u1"),
   verifyPassword: vi.fn(),
   hashPassword: vi.fn(async () => "hash"),
   createSession: vi.fn(async () => {}),
+  deleteSession: vi.fn(async () => {}),
   sendInitialVerificationEmail: vi.fn(async () => {}),
   ip: "203.0.113.9",
 }));
@@ -23,8 +27,13 @@ vi.mock("next/navigation", () => ({
     throw new Error(`NEXT_REDIRECT:${url}`);
   },
 }));
+vi.mock("@/lib/dal", () => ({
+  requireUserId: mocks.requireUserId,
+}));
 vi.mock("@/lib/users", () => ({
   findUserByEmail: mocks.findUserByEmail,
+  findUserCredentialsById: mocks.findUserCredentialsById,
+  updateUserPasswordIfCurrent: mocks.updateUserPasswordIfCurrent,
   createUser: mocks.createUser,
 }));
 vi.mock("@/lib/password", () => ({
@@ -34,13 +43,17 @@ vi.mock("@/lib/password", () => ({
 }));
 vi.mock("@/lib/session", () => ({
   createSession: mocks.createSession,
-  deleteSession: vi.fn(),
+  deleteSession: mocks.deleteSession,
 }));
 vi.mock("@/app/actions/account-recovery", () => ({
   sendInitialVerificationEmail: mocks.sendInitialVerificationEmail,
 }));
 
-import { loginAction, registerAction } from "@/app/actions/auth";
+import {
+  changePasswordAction,
+  loginAction,
+  registerAction,
+} from "@/app/actions/auth";
 
 function form(values: Record<string, string>) {
   const fd = new FormData();
@@ -161,5 +174,113 @@ describe("registerAction verification email", () => {
     mocks.sendInitialVerificationEmail.mockResolvedValueOnce("unavailable" as never);
 
     await expect(submit()).rejects.toThrow("NEXT_REDIRECT:/");
+  });
+});
+
+describe("changePasswordAction", () => {
+  const submit = (overrides: Record<string, string> = {}) =>
+    changePasswordAction(
+      {},
+      form({
+        current: "Password123",
+        password: "NewPassword456",
+        confirm: "NewPassword456",
+        ...overrides,
+      }),
+    );
+
+  beforeEach(() => {
+    mocks.requireUserId.mockResolvedValue("u1");
+    mocks.findUserCredentialsById.mockResolvedValue({
+      id: "u1",
+      name: "n",
+      passwordHash: "old-hash",
+      emailVerifiedAt: null,
+    });
+    mocks.verifyPassword.mockResolvedValue(false);
+    mocks.updateUserPasswordIfCurrent.mockResolvedValue(true);
+  });
+
+  it("redirects to login without a session, before touching any credential", async () => {
+    mocks.requireUserId.mockRejectedValue(new Error("NEXT_REDIRECT:/login"));
+
+    await expect(submit()).rejects.toThrow("NEXT_REDIRECT:/login");
+    expect(mocks.findUserCredentialsById).not.toHaveBeenCalled();
+    expect(mocks.verifyPassword).not.toHaveBeenCalled();
+  });
+
+  it("verifies the current password, stores the new hash, ends the session and redirects to sign in", async () => {
+    mocks.verifyPassword.mockResolvedValue(true);
+
+    await expect(submit()).rejects.toThrow(
+      "NEXT_REDIRECT:/login?passwordChanged=1",
+    );
+    expect(mocks.verifyPassword).toHaveBeenCalledWith(
+      "Password123",
+      "old-hash",
+    );
+    expect(mocks.hashPassword).toHaveBeenCalledWith("NewPassword456");
+    // Compare-and-swap against the hash that was just verified.
+    expect(mocks.updateUserPasswordIfCurrent).toHaveBeenCalledWith(
+      "u1",
+      "old-hash",
+      "hash",
+    );
+    expect(mocks.deleteSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("never stores the plaintext password", async () => {
+    mocks.verifyPassword.mockResolvedValue(true);
+
+    await expect(submit()).rejects.toThrow("NEXT_REDIRECT:/login");
+    expect(mocks.hashPassword).toHaveBeenCalledWith("NewPassword456");
+    const storedHash = mocks.updateUserPasswordIfCurrent.mock.calls[0]?.[2];
+    expect(storedHash).toBeDefined();
+    expect(storedHash).not.toBe("NewPassword456");
+    expect(storedHash).not.toBe("Password123");
+  });
+
+  it("rejects an incorrect current password without changing anything", async () => {
+    mocks.verifyPassword.mockResolvedValue(false);
+
+    const res = await submit();
+    expect(res.fieldErrors?.current).toContain("نادرست");
+    expect(mocks.hashPassword).not.toHaveBeenCalled();
+    expect(mocks.updateUserPasswordIfCurrent).not.toHaveBeenCalled();
+    expect(mocks.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it("rejects a weak new password before any credential check", async () => {
+    const res = await submit({ password: "short", confirm: "short" });
+    expect(res.fieldErrors?.password).toBeTruthy();
+    expect(mocks.verifyPassword).not.toHaveBeenCalled();
+    expect(mocks.hashPassword).not.toHaveBeenCalled();
+    expect(mocks.updateUserPasswordIfCurrent).not.toHaveBeenCalled();
+  });
+
+  it("rejects a mismatched confirmation with a field error", async () => {
+    const res = await submit({ confirm: "Different1" });
+    expect(res.fieldErrors?.confirm).toContain("یکسان");
+    expect(mocks.hashPassword).not.toHaveBeenCalled();
+    expect(mocks.updateUserPasswordIfCurrent).not.toHaveBeenCalled();
+  });
+
+  it("applies no change and keeps the session when the stored hash moves concurrently", async () => {
+    mocks.verifyPassword.mockResolvedValue(true);
+    mocks.updateUserPasswordIfCurrent.mockResolvedValue(false);
+
+    const res = await submit();
+    expect(res.message).toContain("دیگر معتبر نیست");
+    expect(res.fieldErrors).toBeUndefined();
+    expect(mocks.deleteSession).not.toHaveBeenCalled();
+    expect(mocks.hashPassword).toHaveBeenCalled();
+  });
+
+  it("ends the session when the account vanished behind a live cookie", async () => {
+    mocks.findUserCredentialsById.mockResolvedValue(null);
+
+    await expect(submit()).rejects.toThrow("NEXT_REDIRECT:/login");
+    expect(mocks.verifyPassword).not.toHaveBeenCalled();
+    expect(mocks.updateUserPasswordIfCurrent).not.toHaveBeenCalled();
   });
 });

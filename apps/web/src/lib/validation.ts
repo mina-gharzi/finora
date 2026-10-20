@@ -75,10 +75,34 @@ export const verifyEmailSchema = z.object({
   token: authTokenFieldSchema,
 });
 
+/**
+ * In-session password change: the current password must be re-proven before
+ * the new one applies; `confirm` is compared against `password` only after
+ * both pass the password policy, so mismatch errors never mask policy errors.
+ */
+export const changePasswordSchema = z
+  .object({
+    current: z
+      .string({ error: "گذرواژه فعلی را وارد کنید." })
+      .min(1, { error: "گذرواژه فعلی را وارد کنید." })
+      .max(MAX_LOGIN_PASSWORD_LENGTH, {
+        error: "گذرواژه بیش از حد طولانی است.",
+      }),
+    password: passwordSchema,
+    confirm: z
+      .string({ error: "تکرار گذرواژه را وارد کنید." })
+      .min(1, { error: "تکرار گذرواژه را وارد کنید." }),
+  })
+  .refine((value) => value.password === value.confirm, {
+    error: "گذرواژه و تکرار آن یکسان نیستند.",
+    path: ["confirm"],
+  });
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
 /** Flattens a Zod error into a `{ field: firstMessage }` map for form display. */
 export function toFieldErrors(error: z.ZodError): Record<string, string> {
