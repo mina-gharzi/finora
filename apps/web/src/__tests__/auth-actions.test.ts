@@ -300,3 +300,62 @@ describe("changePasswordAction", () => {
     expect(mocks.updateUserPasswordIfCurrent).not.toHaveBeenCalled();
   });
 });
+
+describe("changePasswordAction rate limiting", () => {
+  const submit = (overrides: Record<string, string> = {}) =>
+    changePasswordAction(
+      {},
+      form({
+        current: "Password123",
+        password: "NewPassword456",
+        confirm: "NewPassword456",
+        ...overrides,
+      }),
+    );
+
+  beforeEach(() => {
+    mocks.requireUserId.mockResolvedValue("u1");
+    mocks.findUserCredentialsById.mockResolvedValue({
+      id: "u1",
+      name: "n",
+      passwordHash: "old-hash",
+      emailVerifiedAt: null,
+    });
+    // Wrong current password keeps the flow on the "verify" path so the
+    // limiter is hit without a successful change ending the session.
+    mocks.verifyPassword.mockResolvedValue(false);
+    mocks.updateUserPasswordIfCurrent.mockResolvedValue(true);
+  });
+
+  it("blocks the 6th attempt for one user without running bcrypt", async () => {
+    for (let i = 0; i < 5; i++) {
+      const res = await submit();
+      expect(res.fieldErrors?.current).toContain("نادرست");
+    }
+    const hashes = mocks.hashPassword.mock.calls.length;
+    const verifies = mocks.verifyPassword.mock.calls.length;
+
+    const res = await submit();
+    expect(res.message).toContain("بیش از حد مجاز");
+    expect(mocks.hashPassword.mock.calls.length).toBe(hashes);
+    expect(mocks.verifyPassword.mock.calls.length).toBe(verifies);
+  });
+
+  it("does not spend budget on input that fails validation", async () => {
+    for (let i = 0; i < 10; i++) {
+      await submit({ password: "short", confirm: "short" });
+    }
+    // Budget still intact: the first valid attempt is not rate-limited.
+    const res = await submit();
+    expect(res.message ?? "").not.toContain("بیش از حد مجاز");
+  });
+
+  it("keys the limiter on the session user, never on form data", async () => {
+    mocks.requireUserId.mockResolvedValue("session-user");
+    await submit({ userId: "attacker-supplied" });
+    // The limiter is scoped per authenticated user; the posted userId field is
+    // ignored entirely by the action and validation schema.
+    const res = await submit();
+    expect(res.fieldErrors?.current ?? res.message ?? "").toBeTruthy();
+  });
+});

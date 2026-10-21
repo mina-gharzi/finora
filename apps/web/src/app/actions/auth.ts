@@ -58,6 +58,14 @@ export async function registerAction(
 
   const { name, email, password } = parsed.data;
 
+  // Enumeration note (accepted, bounded): registration answers honestly that an
+  // address is already taken. Unlike the unauthenticated recovery flow — where
+  // the correct answer is a byte-identical generic "check your inbox" — a
+  // register response has no neutral equivalent: claiming success for an
+  // existing address would either create no account while telling the user it
+  // did, or require an email-confirmation-based signup redesign (a product
+  // change, out of scope). The oracle is therefore kept and bounded by the
+  // per-IP register limit above. Do not "fix" this by returning generic success.
   if (await findUserByEmail(email)) {
     return { fieldErrors: { email: "این ایمیل قبلاً ثبت شده است." } };
   }
@@ -173,6 +181,15 @@ export async function changePasswordAction(
 
   if (!parsed.success) {
     return { fieldErrors: toFieldErrors(parsed.error) };
+  }
+
+  // Limit before the current-password check and the new-password hash: both
+  // verify and hash are bcrypt work an authenticated attacker could otherwise
+  // drive without bound.
+  const { changePasswordUser } = getAuthLimiters();
+  const gate = await enforceLimits([{ limiter: changePasswordUser, key: userId }]);
+  if (!gate.allowed) {
+    return { message: tooManyAttemptsMessage(gate.retryAfterSeconds) };
   }
 
   const user = await findUserCredentialsById(userId);

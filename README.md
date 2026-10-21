@@ -12,6 +12,19 @@ A Persian personal finance management application.
 
 pnpm
 
+## Documentation
+
+- [`apps/web/README.md`](apps/web/README.md) — app-level development, testing and
+  build commands.
+- [`docs/production-deployment.md`](docs/production-deployment.md) — production
+  deployment runbook (prerequisites, environment, migrations, build/start,
+  email, proxy/TLS, smoke tests, rollback).
+- [`docs/database-backup.md`](docs/database-backup.md) — PostgreSQL backup and
+  restore procedure.
+- [`docs/operations.md`](docs/operations.md) — operational observability and
+  maintenance (health checks, structured logs and alerts, request correlation,
+  rate-limit sweep scheduling, log retention).
+
 ## Verification
 
 All commands below are run from the repository root and cover both workspace

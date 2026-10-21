@@ -77,14 +77,25 @@ export async function findCategoryForUser(
   return row;
 }
 
-/** Number of transactions referencing `categoryId`. */
+/**
+ * Number of transactions owned by `userId` that reference `categoryId`.
+ *
+ * Ownership is enforced in the query itself: the transaction/category join is
+ * scoped by the owner, so a caller passing a foreign `categoryId` gets `0` and
+ * can never observe another user's transaction count. The owner id always
+ * comes from the verified session, never from input.
+ */
 export async function countTransactionsForCategory(
+  userId: string,
   categoryId: string,
 ): Promise<number> {
   const [row] = await getDb()
     .select({ value: count() })
     .from(transactions)
-    .where(eq(transactions.categoryId, categoryId));
+    .innerJoin(categories, eq(categories.id, transactions.categoryId))
+    .where(
+      and(eq(transactions.categoryId, categoryId), eq(categories.userId, userId)),
+    );
 
   return row?.value ?? 0;
 }
@@ -187,7 +198,7 @@ export async function deleteCategory(
     return { ok: false, reason: "not_found" };
   }
 
-  const transactionCount = await countTransactionsForCategory(categoryId);
+  const transactionCount = await countTransactionsForCategory(userId, categoryId);
   return { ok: false, reason: "has_transactions", transactionCount };
 }
 

@@ -27,6 +27,7 @@ vi.mock("@/db", async () => {
 });
 
 import {
+  countTransactionsForAccount,
   createAccount,
   deleteAccount,
   findAccountForUser,
@@ -269,5 +270,34 @@ describe("setAccountArchived", () => {
       setAccountArchived(OWNER, "not-a-uuid", true),
     ).resolves.toEqual({ ok: false, reason: "not_found" });
     expect(h.state.updateCalls).toBe(0);
+  });
+});
+
+describe("countTransactionsForAccount", () => {
+  it("returns the number of referencing transactions", async () => {
+    h.state.selectQueue = [[{ value: 4 }]];
+    await expect(countTransactionsForAccount(OWNER, ACCOUNT_ID)).resolves.toBe(
+      4,
+    );
+  });
+
+  it("defaults to zero when there are no rows", async () => {
+    h.state.selectQueue = [[]];
+    await expect(countTransactionsForAccount(OWNER, ACCOUNT_ID)).resolves.toBe(
+      0,
+    );
+  });
+
+  it("scopes the count to the owner so a foreign account cannot be probed", async () => {
+    h.state.selectQueue = [[{ value: 0 }]];
+
+    await countTransactionsForAccount(OWNER, ACCOUNT_ID);
+
+    const { sql, params } = new PgDialect().sqlToQuery(
+      h.state.whereConditions[h.state.whereConditions.length - 1] as never,
+    );
+    expect(sql).toContain("user_id");
+    expect(params).toContain(OWNER);
+    expect(params).toContain(ACCOUNT_ID);
   });
 });

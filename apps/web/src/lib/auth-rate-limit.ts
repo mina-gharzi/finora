@@ -43,6 +43,8 @@ interface AuthLimiters {
   changeEmailUser: RateLimiter;
   /** Email-change requests per client address. */
   changeEmailIp: RateLimiter;
+  /** In-session password-change attempts per signed-in user. */
+  changePasswordUser: RateLimiter;
 }
 
 const globalForLimiters = globalThis as unknown as {
@@ -104,6 +106,15 @@ export function getAuthLimiters(): AuthLimiters {
         scope: "auth:change-email:ip",
         limit: 10,
         windowMs: ONE_HOUR,
+      }),
+      // Each attempt re-verifies the CURRENT password, so it is a credential
+      // check like a login: reuse the login-attempt budget (5 per 15 min) to
+      // throttle brute-forcing the current password and the bcrypt cost of
+      // hashing under a valid session, without hurting a legitimate user.
+      changePasswordUser: createPersistentRateLimiter({
+        scope: "auth:change-password:user",
+        limit: 5,
+        windowMs: FIFTEEN_MINUTES,
       }),
     };
   }

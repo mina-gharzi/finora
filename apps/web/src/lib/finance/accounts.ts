@@ -79,13 +79,23 @@ export async function findAccountForUser(
   return row;
 }
 
+/**
+ * Number of transactions owned by `userId` that reference `accountId`.
+ *
+ * Ownership is enforced in the query itself: the join between the transaction
+ * and its account is scoped by the owner, so a caller passing a foreign
+ * `accountId` gets `0` and can never observe another user's transaction count.
+ * The owner id always comes from the verified session, never from input.
+ */
 export async function countTransactionsForAccount(
+  userId: string,
   accountId: string,
 ): Promise<number> {
   const [row] = await getDb()
     .select({ value: count() })
     .from(transactions)
-    .where(eq(transactions.accountId, accountId));
+    .innerJoin(accounts, eq(accounts.id, transactions.accountId))
+    .where(and(eq(transactions.accountId, accountId), eq(accounts.userId, userId)));
 
   return row?.value ?? 0;
 }

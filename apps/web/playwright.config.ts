@@ -25,9 +25,13 @@ export default defineConfig({
   // unique forwarded IP fixture keeps buckets separate within the run.
   globalSetup: "./e2e/global-setup.ts",
   // Every test registers a throwaway account against the same local Postgres;
-  // the default worker count (≈ CPU count) saturates it and makes registration
-  // flaky, so keep a small, deterministic pool.
-  workers: 2,
+  // registration runs bcrypt at the production cost, which is CPU-bound. With
+  // more than one worker the server saturates and the registerUser helper's
+  // post-submit URL wait times out under contention (measured in Stage 30: all
+  // 61 tests pass at 1 worker; 28-32 fail at 2), so run strictly serially. This
+  // trades a few minutes of wall-clock for a deterministic suite; it does NOT
+  // lower the production bcrypt cost.
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: "list",
