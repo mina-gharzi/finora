@@ -43,7 +43,7 @@ export async function registerUser(
   await field(page, "email").fill(credentials.email);
   await field(page, "password").fill(credentials.password);
   await page.getByRole("button", { name: "ثبت‌نام" }).click();
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/dashboard");
   // Financial mutations require a verified email; tests have no inbox, so
   // apply the verification end state the emailed link would produce.
   await markEmailVerified(credentials.email);

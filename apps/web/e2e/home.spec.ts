@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("home page renders the Persian application shell", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/dashboard");
 
   const html = page.locator("html");
   await expect(html).toHaveAttribute("lang", "fa");
@@ -32,7 +32,7 @@ test("home page renders the Persian application shell", async ({ page }) => {
 test("light theme exposes the approved brand palette through semantic tokens", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/dashboard");
 
   // Off White background.
   await expect(page.locator("body")).toHaveCSS(
@@ -59,7 +59,7 @@ test("light theme exposes the approved brand palette through semantic tokens", a
 test("skip link is the first control and moves to the main content", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/dashboard");
 
   await page.keyboard.press("Tab");
   const skipLink = page.getByRole("link", { name: "پرش به محتوای اصلی" });
@@ -70,7 +70,7 @@ test("skip link is the first control and moves to the main content", async ({
 });
 
 test("theme toggle applies and survives a reload", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/dashboard");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
   const toggle = page.getByRole("button", { name: "حالت تیره" });
@@ -90,7 +90,7 @@ test("theme toggle applies and survives a reload", async ({ page }) => {
 test("dark theme uses the Near Black foundation with a lightened burgundy", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/dashboard");
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
     "rgb(245, 245, 247)",
@@ -124,7 +124,7 @@ test("mobile navigation opens with the menu button and closes on Escape", async 
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await page.goto("/dashboard");
 
   await expect(page.locator("aside")).toBeHidden();
 

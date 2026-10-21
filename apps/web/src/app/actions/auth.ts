@@ -90,7 +90,7 @@ export async function registerAction(
   await sendInitialVerificationEmail({ userId, email, name });
 
   await createSession(userId);
-  redirect("/");
+  redirect("/dashboard");
 }
 
 export async function loginAction(
@@ -147,7 +147,7 @@ export async function loginAction(
   // counter remains as the backstop.
   await resetLimits([{ limiter: loginAccount, key: email }]);
   await createSession(user.id);
-  redirect("/");
+  redirect("/dashboard");
 }
 
 export async function logoutAction(): Promise<void> {

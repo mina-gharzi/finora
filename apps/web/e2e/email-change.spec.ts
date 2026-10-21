@@ -64,7 +64,7 @@ test.describe("email change", () => {
     await page.getByRole("button", { name: "خروج" }).click();
     await expect(page).toHaveURL("/login");
     await login(page, credentials.email, credentials.password);
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL("/dashboard");
   });
 
   test("names a duplicate address to the signed-in owner, without claiming delivery", async ({
@@ -114,14 +114,15 @@ test.describe("email change", () => {
     await page.getByRole("button", { name: "تأیید تغییر ایمیل" }).click();
     await expect(page.getByText(EMAIL_CHANGED_MESSAGE)).toBeVisible();
 
-    // The app's own cookie was cleared with the change: anonymous now.
-    await page.goto("/");
+    // The app's own cookie was cleared with the change: anonymous now, so a
+    // protected route bounces to login.
+    await page.goto("/dashboard");
     await expect(page).toHaveURL(/\/login$/);
 
     // Re-install the pre-change cookie: its HMAC is still valid, so only
     // the session-invalidation watermark can keep it out.
     await context.addCookies(staleCookies);
-    await page.goto("/");
+    await page.goto("/dashboard");
     await expect(page).toHaveURL("/login?session=expired");
 
     // The old address is dead for login...
@@ -130,7 +131,7 @@ test.describe("email change", () => {
 
     // ...and the new address works (verification carried over).
     await login(page, newEmail, credentials.password);
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL("/dashboard");
 
     // The link was spent: the URL now renders the already-used answer and
     // offers no confirm button.

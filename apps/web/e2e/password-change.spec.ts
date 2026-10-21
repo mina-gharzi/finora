@@ -58,7 +58,7 @@ test.describe("password change", () => {
 
     // The new password works.
     await login(page, credentials.email, "NewPassword456");
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL("/dashboard");
     await expect(
       page.getByRole("heading", { level: 1, name: "داشبورد" }),
     ).toBeVisible();
@@ -84,7 +84,7 @@ test.describe("password change", () => {
     await page.getByRole("button", { name: "خروج" }).click();
     await expect(page).toHaveURL("/login");
     await login(page, credentials.email, credentials.password);
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL("/dashboard");
   });
 
   test("rejects a mismatched confirmation with a Persian field error", async ({
@@ -118,7 +118,7 @@ test.describe("password change", () => {
     // Re-install the pre-change cookie: its HMAC is still valid, so only
     // the session-invalidation watermark can keep it out.
     await context.addCookies(staleCookies);
-    await page.goto("/");
+    await page.goto("/dashboard");
     // The DAL rejects it and the proxy lets it settle on the marked login
     // page — a stable destination (no redirect loop) with a clear notice.
     await expect(page).toHaveURL("/login?session=expired");
@@ -134,6 +134,6 @@ test.describe("password change", () => {
     await field(page, "email").fill(credentials.email);
     await field(page, "password").fill("NewPassword456");
     await page.getByRole("button", { name: "ورود" }).click();
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL("/dashboard");
   });
 });

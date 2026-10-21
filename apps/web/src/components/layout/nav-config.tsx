@@ -30,7 +30,7 @@ export const navGroups: { title: string; items: NavEntry[] }[] = [
       {
         key: "dashboard",
         label: "داشبورد",
-        href: "/",
+        href: "/dashboard",
         icon: <DashboardIcon />,
       },
     ],

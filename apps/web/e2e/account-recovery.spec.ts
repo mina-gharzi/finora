@@ -58,8 +58,8 @@ test.describe("password recovery", () => {
     await expect(page.getByText(PASSWORD_RESET_DONE_MESSAGE)).toBeVisible();
 
     // Every pre-reset session is invalidated: the still-held cookie no
-    // longer authenticates.
-    await page.goto("/");
+    // longer authenticates, so a protected route bounces to login.
+    await page.goto("/dashboard");
     await expect(page).toHaveURL(/\/login$/);
 
     // The old password is dead.
@@ -69,7 +69,7 @@ test.describe("password recovery", () => {
 
     // The new password works.
     await login(page, credentials.email, newPassword);
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL("/dashboard");
 
     // The token was spent; it cannot be replayed.
     await page.goto(`/reset-password?token=${rawToken}`);

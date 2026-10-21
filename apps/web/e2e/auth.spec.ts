@@ -2,10 +2,20 @@ import { expect, test } from "./fixtures";
 import { field, makeCredentials, registerUser } from "./helpers";
 
 test.describe("authentication", () => {
-  test("redirects unauthenticated visitors from the app to the login page", async ({
+  test("shows the public landing page to unauthenticated visitors at the root", async ({
     page,
   }) => {
     await page.goto("/");
+    await expect(page).toHaveURL("/");
+    await expect(
+      page.getByRole("link", { name: "شروع رایگان" }).first(),
+    ).toBeVisible();
+  });
+
+  test("redirects unauthenticated visitors from a protected route to the login page", async ({
+    page,
+  }) => {
+    await page.goto("/dashboard");
     await expect(page).toHaveURL("/login");
     await expect(
       page.getByRole("heading", { level: 1, name: "ورود به فینورا" }),
@@ -71,8 +81,11 @@ test.describe("authentication", () => {
     await page.getByRole("button", { name: "خروج" }).click();
     await expect(page).toHaveURL("/login");
 
-    // The session is gone: the app route is protected again.
+    // The session is gone: the root is public again and the app route is
+    // protected.
     await page.goto("/");
+    await expect(page).toHaveURL("/");
+    await page.goto("/dashboard");
     await expect(page).toHaveURL("/login");
   });
 
@@ -88,7 +101,7 @@ test.describe("authentication", () => {
     await field(page, "password").fill(credentials.password);
     await page.getByRole("button", { name: "ورود" }).click();
 
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL("/dashboard");
     await expect(
       page.getByRole("heading", { level: 1, name: "داشبورد" }),
     ).toBeVisible();
@@ -117,6 +130,6 @@ test.describe("authentication", () => {
     await registerUser(page, makeCredentials());
 
     await page.goto("/login");
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL("/dashboard");
   });
 });

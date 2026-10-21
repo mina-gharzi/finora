@@ -121,11 +121,11 @@ describe("Alert", () => {
 
 describe("NavItem", () => {
   it("marks the active destination for assistive technology", () => {
-    render(<NavItem label="داشبورد" href="/" active />);
+    render(<NavItem label="داشبورد" href="/dashboard" active />);
 
     const link = screen.getByRole("link", { name: "داشبورد" });
     expect(link.getAttribute("aria-current")).toBe("page");
-    expect(link.getAttribute("href")).toBe("/");
+    expect(link.getAttribute("href")).toBe("/dashboard");
   });
 
   it("renders placeholders as non-interactive text", () => {

@@ -54,13 +54,26 @@ describe("proxy route guard", () => {
     const token = await signSessionToken("user-1", STRONG_SECRET);
     const response = await run("/login", await cookieHeader(token));
     expect(response.status).toBe(307);
-    expect(locationPath(response)).toBe("/");
+    expect(locationPath(response)).toBe("/dashboard");
+  });
+
+  it("lets an anonymous visitor read the landing page", async () => {
+    const response = await run("/");
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("redirects a signed-in visitor from the landing page to the dashboard", async () => {
+    const token = await signSessionToken("user-1", STRONG_SECRET);
+    const response = await run("/", await cookieHeader(token));
+    expect(response.status).toBe(307);
+    expect(locationPath(response)).toBe("/dashboard");
   });
 
   it("keeps the session holder off the marked revoked-session login page bounce only", async () => {
     // A cookie that still verifies here but fails the DAL watermark must be
     // able to settle on /login?session=expired — otherwise the proxy and the
-    // DAL bounce it between / and /login forever.
+    // DAL bounce it between /dashboard and /login forever.
     const token = await signSessionToken("user-1", STRONG_SECRET);
     const response = await run(
       "/login?session=expired",
@@ -74,7 +87,7 @@ describe("proxy route guard", () => {
     const token = await signSessionToken("user-1", STRONG_SECRET);
     const response = await run("/login?passwordChanged=1", await cookieHeader(token));
     expect(response.status).toBe(307);
-    expect(locationPath(response)).toBe("/");
+    expect(locationPath(response)).toBe("/dashboard");
   });
 
   it("allows anonymous visitors onto the auth pages", async () => {
@@ -93,7 +106,7 @@ describe("proxy route guard", () => {
     const token = await signSessionToken("user-1", STRONG_SECRET);
     const response = await run("/forgot-password", await cookieHeader(token));
     expect(response.status).toBe(307);
-    expect(locationPath(response)).toBe("/");
+    expect(locationPath(response)).toBe("/dashboard");
   });
 
   it("lets anonymous visitors open token pages (token itself is the credential)", async () => {

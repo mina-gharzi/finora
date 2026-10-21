@@ -2,7 +2,7 @@ import type { AnchorHTMLAttributes } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const nav = vi.hoisted(() => ({ pathname: "/" }));
+const nav = vi.hoisted(() => ({ pathname: "/dashboard" }));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => nav.pathname,
@@ -23,7 +23,7 @@ vi.mock("next/link", () => ({
 import { AppShell } from "@/components/layout/app-shell";
 
 afterEach(() => {
-  nav.pathname = "/";
+  nav.pathname = "/dashboard";
   cleanup();
 });
 
@@ -63,7 +63,7 @@ describe("AppShell", () => {
 
     const current = screen.getByRole("link", { name: "داشبورد" });
     expect(current.getAttribute("aria-current")).toBe("page");
-    expect(current.getAttribute("href")).toBe("/");
+    expect(current.getAttribute("href")).toBe("/dashboard");
 
     const transactions = screen.getByRole("link", { name: "تراکنش‌ها" });
     expect(transactions.getAttribute("href")).toBe("/transactions");

@@ -60,6 +60,6 @@ test.describe("persistent auth rate limiting", () => {
     }
 
     await submitLogin(page, credentials.email, credentials.password);
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL("/dashboard");
   });
 });

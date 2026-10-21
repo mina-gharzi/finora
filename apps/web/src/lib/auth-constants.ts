@@ -22,6 +22,15 @@ export const MIN_SESSION_SECRET_LENGTH = 32;
 export const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password"] as const;
 
 /**
+ * The public marketing landing page. Anonymous visitors are allowed through to
+ * read it; signed-in visitors are redirected to the dashboard below instead.
+ */
+export const LANDING_ROUTE = "/";
+
+/** The authenticated application home. Landing/auth redirects target it. */
+export const DASHBOARD_ROUTE = "/dashboard";
+
+/**
  * Routes that accept a token from an emailed link and are therefore open to
  * both anonymous and signed-in visitors (a reset link may be opened in any
  * browser). Neither redirect rule applies to them.
