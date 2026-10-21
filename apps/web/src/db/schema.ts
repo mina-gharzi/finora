@@ -197,9 +197,19 @@ export const transactions = pgTable(
       sql`${table.type} in ('income', 'expense')`,
     ),
     check("transactions_amount_check", sql`${table.amount} > 0`),
-    index("transactions_user_id_idx").on(table.userId),
+    // Primary read path: every history/dashboard/report query filters by the
+    // owner (`user_id`) first, then optionally narrows by `occurred_on`, and
+    // orders newest-first by `(occurred_on DESC, created_at DESC)`. This
+    // composite index serves the owner predicate, the optional date range and
+    // the sort order in a single index walk, so a page of history never sorts
+    // or discards rows. Its leading `user_id` column also covers the plain
+    // owner-scoped lookups, making a separate `user_id`-only index redundant.
+    index("transactions_user_id_occurred_on_created_at_idx").on(
+      table.userId,
+      table.occurredOn.desc(),
+      table.createdAt.desc(),
+    ),
     index("transactions_account_id_idx").on(table.accountId),
-    index("transactions_occurred_on_idx").on(table.occurredOn),
   ],
 );
 

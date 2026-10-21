@@ -43,6 +43,13 @@
       "when": 1792510512565,
       "tag": "0005_neat_pyro",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792568831467,
+      "tag": "0006_lying_zeigeist",
+      "breakpoints": true
     }
   ]
 }
