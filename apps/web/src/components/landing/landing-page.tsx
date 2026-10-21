@@ -220,7 +220,7 @@ function Hero() {
       {/* Faint dot grid that fades out toward the edges */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 text-primary/25 [background-image:radial-gradient(currentColor_1px,transparent_1px)] [background-size:22px_22px] [mask-image:radial-gradient(ellipse_70%_65%_at_50%_40%,#000_25%,transparent_100%)]"
+        className="pointer-events-none absolute inset-0 -z-10 text-primary/25 bg-[radial-gradient(currentColor_1px,transparent_1px)] bg-size-[22px_22px] mask-[radial-gradient(ellipse_70%_65%_at_50%_40%,#000_25%,transparent_100%)]"
       />
 
       <div className="mx-auto grid w-full max-w-6xl items-center gap-16 px-4 py-16 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:gap-16 lg:py-28">
@@ -307,7 +307,7 @@ function Features() {
     >
       <h2
         id="features-heading"
-        className="max-w-2xl text-balance text-3xl font-extrabold leading-[1.5] text-foreground sm:text-4xl"
+        className="max-w-2xl text-balance text-3xl font-extrabold leading-normal text-foreground sm:text-4xl"
       >
         سه کار اصلی، بدون شلوغی
       </h2>
@@ -364,7 +364,7 @@ function Reports() {
         <div className="flex flex-col gap-4">
           <h2
             id="reports-heading"
-            className="text-balance text-3xl font-extrabold leading-[1.5] text-foreground sm:text-4xl"
+            className="text-balance text-3xl font-extrabold leading-normal text-foreground sm:text-4xl"
           >
             ماه‌ها را کنار هم بگذارید
           </h2>
@@ -506,7 +506,7 @@ function ClosingCta() {
     <section className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 sm:pb-28">
       <div className="flex flex-col items-start gap-6 rounded-2xl bg-primary px-6 py-12 text-primary-foreground dark:bg-primary-subtle dark:text-foreground sm:px-12 sm:py-16">
         <span aria-hidden="true" className="h-1 w-16 rounded-full bg-accent" />
-        <h2 className="max-w-2xl text-balance text-3xl font-extrabold leading-[1.5] sm:text-4xl">
+        <h2 className="max-w-2xl text-balance text-3xl font-extrabold leading-normal sm:text-4xl">
           ماه بعد را با حساب روشن شروع کنید
         </h2>
         <p className="max-w-xl text-base leading-8 opacity-80">

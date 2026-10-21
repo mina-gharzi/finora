@@ -104,7 +104,7 @@ export function MobileMenu({ items, loginHref }: MobileMenuProps) {
       {open && (
         <div
           id={panelId}
-          className="absolute end-0 top-full mt-3 w-56 rounded-2xl border border-border bg-surface p-2 shadow-lg"
+          className="absolute inset-e-0 top-full mt-3 w-56 rounded-2xl border border-border bg-surface p-2 shadow-lg"
         >
           <nav aria-label="بخش‌های صفحه" className="flex flex-col">
             {items.map((item) => (
