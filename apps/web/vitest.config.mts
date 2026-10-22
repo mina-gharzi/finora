@@ -15,6 +15,9 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    // jsdom implements no `window.matchMedia`; the stub keeps components that
+    // read a media query renderable under test (see the file for details).
+    setupFiles: ["./src/test/jsdom-setup.ts"],
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },
 });

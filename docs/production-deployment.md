@@ -207,6 +207,15 @@ Rules:
   ```
 - If `db:generate` reports changes after deploying, the applied schema and the
   code's `schema.ts` disagree — stop and investigate.
+- **A skipped migration breaks authentication, not just one table.** The
+  rate-limit store lives in the database, so a database without the
+  `rate_limit_counters` table makes every rate-limit query fail; the limiter
+  then fails **closed** and answers every login and registration with "too many
+  attempts" — an outage that looks exactly like an abuse wave. After migrating,
+  confirm the deployed instance with `GET /api/health`: it returns `200` only
+  when the database answers **and** the rate-limit table exists; `503` with the
+  `health.schema.incomplete` log event means the migrations are missing on the
+  database that instance is actually using.
 
 **Verified locally.** `pnpm --filter @finora/web db:generate` reports
 "No schema changes" against the migrated local database, and the journal lists
@@ -245,6 +254,22 @@ Notes:
 - Run the app behind the reverse proxy in §9; the app itself listens on
   `127.0.0.1:3000` by default (Next.js default port 3000).
 - Do **not** run `next dev` in production.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request in two jobs:
+
+| Job | What it proves |
+| --- | --- |
+| `verify` | Typecheck, lint, unit tests and the production build are green. No database and no secrets are needed — the unit tests mock the database module and `next build` does not open a connection. |
+| `e2e` | The full Playwright suite passes against a throwaway PostgreSQL service **with the migrations applied**. It is the only job that exercises the real persistent rate-limit store. |
+
+The `e2e` job is the one that catches the failure mode described in §6: if a
+migration is missing, the rate-limit queries fail, the limiter fails closed and
+every login is answered with "too many attempts" — a production outage that no
+mocked unit test can see. It applies the same migrations the deployment does,
+so a migration that cannot be applied fails CI before it reaches production.
+Failures upload the Playwright trace as a CI artifact.
 
 **Verified locally.** `pnpm build` compiles successfully with no secrets set
 (exit 0); `next start` serves the built app.
@@ -306,9 +331,15 @@ Nth value from the right (values to its left are attacker-controlled).
 - Default `0`: no header is trusted; every caller shares one `unknown` bucket.
   Per-IP limits still apply as a coarse backstop, and header spoofing cannot
   evade the per-account/per-user limits.
-- Behind **one** proxy (typical) set `TRUSTED_PROXY_HOPS=1`.
+- Behind **one** proxy (typical) set `TRUSTED_PROXY_HOPS=1`. On Vercel the
+  platform itself is that proxy, so `1` is the correct value.
 - Make sure the proxy **sets/appends** `x-forwarded-for` (or `x-real-ip` with
   exactly one hop) and does not let clients inject it directly.
+- A production server that starts with fewer than one trusted hop logs a
+  startup warning naming `TRUSTED_PROXY_HOPS`. Treat it as a misconfiguration:
+  the symptom is that *every* visitor shares one bucket, so the per-IP limits
+  (20 registrations per hour, 20 failed logins per 15 minutes) apply to the
+  whole site at once.
 
 Per-account and per-user limits are independent of this value, so a
 misconfigured hop count degrades the IP backstop but not the primary limits.
@@ -348,16 +379,17 @@ Invoke-WebRequest -Uri "https://finora.example.com/api/health" -UseBasicParsing 
 ## 11. Health, logging and monitoring
 
 - **Health probe:** `GET /api/health` → `200 {"status":"ok"}` when the process is
-  serving **and** a `SELECT 1` succeeds; `503 {"status":"unavailable"}` when the
-  database is unreachable. It is unauthenticated, sets `Cache-Control: no-store`,
-  and never leaks driver/SQL/credential detail. Point your load balancer /
-  orchestrator readiness check here. There is no separate liveness endpoint by
-  design.
+  serving **and** a `SELECT 1` succeeds **and** the rate-limit table exists;
+  `503 {"status":"unavailable"}` otherwise. It is unauthenticated, sets
+  `Cache-Control: no-store`, and never leaks driver/SQL/credential detail.
+  Point your load balancer / orchestrator readiness check here. There is no
+  separate liveness endpoint by design.
 - **Structured logs:** single-line JSON to `console` via
   `apps/web/src/lib/logger.ts`. Stable fields: `timestamp`, `level`, `event`
   (dot-separated code), optional `requestId`, plus a small metadata bag.
   **Alert on `event`, not on message text.** Notable events:
-  `health.database.unavailable`, `email.delivery.failed`,
+  `health.database.unavailable`, `health.schema.incomplete`,
+  `rate_limit.store_unavailable`, `db.pool.error`, `email.delivery.failed`,
   `auth.verification.initial_email_undelivered` / `_failed`.
 - **Redaction:** the logger drops keys containing `password`, `secret`, `token`,
   `cookie`, `authorization`, `session`, `jwt`, `apikey`, etc., and scrubs URL
@@ -377,6 +409,8 @@ Invoke-WebRequest -Uri "https://finora.example.com/api/health" -UseBasicParsing 
 | --- | --- | --- |
 | Server exits at boot with a validation error | Missing/short `SESSION_SECRET`, or missing `DATABASE_URL` | Set both; secret ≥ 32 chars |
 | `/api/health` returns 503 | DB unreachable / bad `DATABASE_URL` / TLS failure | Check `health.database.unavailable` log, connectivity, `sslmode` |
+| `/api/health` returns 503 but the DB is reachable | Migrations were never applied to that database | Check `health.schema.incomplete`; apply the migrations (§6) and redeploy |
+| Every login and registration answers "too many attempts" | The rate-limit store is unreachable or its table is missing — the limiter fails closed | Check `rate_limit.store_unavailable` and its `causeCode`; `42P01` = migrations missing, `28P01` = wrong password |
 | Users stay logged out / login loops | Serving over HTTP (cookie is `secure`) or wrong `APP_URL` | Terminate TLS; correct `APP_URL` |
 | Emails never arrive; app shows "unavailable" | Missing `RESEND_API_KEY`/`EMAIL_FROM`, or unverified domain | Complete §8; check Resend dashboard |
 | Every caller shares one rate-limit bucket | `TRUSTED_PROXY_HOPS` unset/0 behind a proxy | Set to the real hop count (§9) |

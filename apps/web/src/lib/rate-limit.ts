@@ -43,6 +43,12 @@ export interface RateLimiterOptions {
 
 export interface RateLimiter {
   /**
+   * Optional namespace of the limiter. Purely diagnostic: it is logged when the
+   * backing store is unreachable so an operator can tell WHICH policy failed
+   * without the limiter having to expose any key material.
+   */
+  readonly scope?: string;
+  /**
    * Reports whether `key` may proceed. MUST NOT count an event — callers
    * `check()` first and only `hit()` when the action actually proceeds, so a
    * rejected request does not extend the window.

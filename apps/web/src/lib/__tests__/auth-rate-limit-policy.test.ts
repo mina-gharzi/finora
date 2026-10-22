@@ -87,6 +87,27 @@ describe("auth rate-limit policy", () => {
     expect(changePassword.windowMs).toBe(15 * MINUTE);
   });
 
+  it("throttles failed logins per account at 5 attempts per 15 minutes", () => {
+    getAuthLimiters();
+    const loginAccount = policy("auth:login:account");
+    expect(loginAccount.limit).toBe(5);
+    expect(loginAccount.windowMs).toBe(15 * MINUTE);
+  });
+
+  it("throttles failed logins per client address at 20 attempts per 15 minutes", () => {
+    getAuthLimiters();
+    const loginIp = policy("auth:login:ip");
+    expect(loginIp.limit).toBe(20);
+    expect(loginIp.windowMs).toBe(15 * MINUTE);
+  });
+
+  it("throttles registration attempts per client address at 20 attempts per hour", () => {
+    getAuthLimiters();
+    const registerIp = policy("auth:register:ip");
+    expect(registerIp.limit).toBe(20);
+    expect(registerIp.windowMs).toBe(60 * MINUTE);
+  });
+
   it("keeps every limiter within a conservative, bounded window", () => {
     getAuthLimiters();
     expect(mocks.created.length).toBeGreaterThan(0);

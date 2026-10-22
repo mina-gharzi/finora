@@ -7,14 +7,18 @@
 #   pnpm test:unit  -> Vitest (apps/web) + node:test (packages/shared)
 #   pnpm build      -> next build for apps/web
 #
-# The Playwright suite (pnpm test:e2e) is deliberately NOT part of this
-# workflow: it needs a running PostgreSQL container, applied migrations and a
-# populated apps/web/.env file, none of which exist in CI. Its local
-# prerequisites are documented in README.md.
+# The Playwright suite (pnpm test:e2e) runs in the separate `e2e` job below,
+# against a throwaway PostgreSQL service with the migrations applied. It is the
+# only suite that exercises the real persistent rate-limit store, which is why
+# it lives here and not in `verify`: a deployment whose migrations were never
+# applied answers every rate-limit query with "undefined table", fails the
+# limiter closed, and turns every login into a "too many attempts" error —
+# invisible to the unit tests, which mock the database.
 #
 # No secret is configured here. Unit tests mock the database module and
 # Next.js reads SESSION_SECRET/DATABASE_URL lazily, so the build does not need
-# credentials.
+# credentials. The e2e job generates a throwaway session secret for its own
+# throwaway database.
 
 name: CI
 
@@ -63,3 +67,68 @@ jobs:
 
       - name: Production build (apps/web)
         run: pnpm build
+
+  e2e:
+    name: Playwright E2E (PostgreSQL + applied migrations)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: finora
+          POSTGRES_PASSWORD: finora
+          POSTGRES_DB: finora
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U finora -d finora"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The Playwright config and drizzle.config.ts both read apps/web/.env.
+      # The session secret is a throwaway value for a throwaway database — it
+      # never protects anything real.
+      - name: Write the e2e environment file
+        run: |
+          cat > apps/web/.env <<'ENV'
+          DATABASE_URL=postgres://finora:finora@127.0.0.1:5432/finora
+          SESSION_SECRET=ci-e2e-session-secret-0123456789abcdef
+          ENV
+
+      - name: Apply database migrations
+        run: pnpm --filter @finora/web db:migrate
+
+      - name: Install the Playwright browser
+        run: pnpm --filter @finora/web exec playwright install --with-deps chromium
+
+      - name: Build and run the E2E suite
+        run: pnpm test:e2e
+
+      # The suite keeps a trace for failing tests (see playwright.config.ts).
+      # Upload it so a CI failure can be inspected without re-running locally.
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: apps/web/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+

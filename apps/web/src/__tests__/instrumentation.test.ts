@@ -123,10 +123,67 @@ describe("email delivery advisory", () => {
     vi.stubEnv("DATABASE_URL", DATABASE_URL);
     vi.stubEnv("RESEND_API_KEY", "re_test_key_1234567890");
     vi.stubEnv("EMAIL_FROM", "Finora <no-reply@example.com>");
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "1");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const register = await importRegister();
     await expect(register()).resolves.toBeUndefined();
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
+
+describe("trusted proxy advisory", () => {
+  it("warns when TRUSTED_PROXY_HOPS is unset, because every client then shares one bucket", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("SESSION_SECRET", STRONG_SECRET);
+    vi.stubEnv("DATABASE_URL", DATABASE_URL);
+    vi.stubEnv("RESEND_API_KEY", "re_test_key_1234567890");
+    vi.stubEnv("EMAIL_FROM", "Finora <no-reply@example.com>");
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const register = await importRegister();
+    await expect(register()).resolves.toBeUndefined();
+
+    const logged = warn.mock.calls.flat().map(String).join(" ");
+    expect(logged).toContain("TRUSTED_PROXY_HOPS");
+    expect(logged).not.toContain(STRONG_SECRET);
+    expect(logged).not.toContain(DATABASE_URL);
+    warn.mockRestore();
+  });
+
+  it("warns when TRUSTED_PROXY_HOPS is not a number", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("SESSION_SECRET", STRONG_SECRET);
+    vi.stubEnv("DATABASE_URL", DATABASE_URL);
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "not-a-number");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const register = await importRegister();
+    await expect(register()).resolves.toBeUndefined();
+
+    expect(warn.mock.calls.flat().map(String).join(" ")).toContain(
+      "TRUSTED_PROXY_HOPS",
+    );
+    warn.mockRestore();
+  });
+
+  it("stays silent when at least one proxy hop is trusted", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("SESSION_SECRET", STRONG_SECRET);
+    vi.stubEnv("DATABASE_URL", DATABASE_URL);
+    vi.stubEnv("RESEND_API_KEY", "re_test_key_1234567890");
+    vi.stubEnv("EMAIL_FROM", "Finora <no-reply@example.com>");
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "1");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const register = await importRegister();
+    await expect(register()).resolves.toBeUndefined();
+
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });

@@ -5,10 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   checkDatabaseConnectivity: vi.fn<() => Promise<boolean>>(),
+  checkRateLimitStoreReady: vi.fn<() => Promise<boolean>>(),
 }));
 
 vi.mock("@/db", () => ({
   checkDatabaseConnectivity: h.checkDatabaseConnectivity,
+  checkRateLimitStoreReady: h.checkRateLimitStoreReady,
 }));
 
 import { GET } from "@/app/api/health/route";
@@ -20,6 +22,8 @@ function request(headers: Record<string, string> = {}): Request {
 beforeEach(() => {
   h.checkDatabaseConnectivity.mockReset();
   h.checkDatabaseConnectivity.mockResolvedValue(true);
+  h.checkRateLimitStoreReady.mockReset();
+  h.checkRateLimitStoreReady.mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -122,5 +126,39 @@ describe("GET /api/health", () => {
     // No session/cookie is present, yet a healthy probe still succeeds.
     const response = await GET(request());
     expect(response.status).toBe(200);
+  });
+
+  it("returns 503 when the database is reachable but the rate-limit table is missing", async () => {
+    // A deployment whose migrations were never applied: `SELECT 1` succeeds,
+    // but every rate-limit query fails with "undefined table" and the limiter
+    // fails closed — every login answers "too many attempts".
+    h.checkRateLimitStoreReady.mockResolvedValue(false);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await GET(request());
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ status: "unavailable" });
+  });
+
+  it("logs a distinct event for an incomplete schema", async () => {
+    h.checkRateLimitStoreReady.mockResolvedValue(false);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await GET(request({ "x-request-id": "trace-456" }));
+
+    const record = JSON.parse(String(errorSpy.mock.calls[0][0]));
+    expect(record.level).toBe("error");
+    expect(record.event).toBe("health.schema.incomplete");
+    expect(record.requestId).toBe("trace-456");
+  });
+
+  it("does not run the schema probe when the database is unreachable", async () => {
+    h.checkDatabaseConnectivity.mockResolvedValue(false);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await GET(request());
+
+    expect(h.checkRateLimitStoreReady).not.toHaveBeenCalled();
   });
 });

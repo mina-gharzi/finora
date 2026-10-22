@@ -27,7 +27,19 @@ describe("LandingPage", () => {
 
     const headings = screen.getAllByRole("heading", { level: 1 });
     expect(headings).toHaveLength(1);
-    expect(headings[0]?.textContent).toContain("درآمد");
+
+    // The headline is marketing copy and changes with the design, so assert
+    // the PROMISE it makes instead of the exact sentence: it is non-empty, it
+    // carries no invented number, and the hero names capabilities the app
+    // actually ships.
+    const headline = headings[0]?.textContent?.trim() ?? "";
+    expect(headline.length).toBeGreaterThan(0);
+    expect(headline).not.toMatch(/\d/);
+
+    const hero = document.body.textContent ?? "";
+    for (const claim of ["تراکنش", "بودجه", "گزارش"]) {
+      expect(hero).toContain(claim);
+    }
   });
 
   it("exposes the main landmark", () => {
@@ -54,9 +66,16 @@ describe("LandingPage", () => {
   it("describes only shipped features without fabricated metrics", () => {
     render(<LandingPage />);
 
-    const features = screen.getByRole("region", { name: "هر آنچه برای پیگیری مالی لازم دارید" });
+    const features = screen.getByRole("region", {
+      name: "سه کار اصلی، بدون شلوغی",
+    });
     const items = within(features).getAllByRole("listitem");
     expect(items).toHaveLength(6);
+
+    // "Without fabricated metrics": the feature copy states no numbers.
+    for (const item of items) {
+      expect(item.textContent ?? "").not.toMatch(/\d/);
+    }
   });
 
   it("presents the getting-started steps as an ordered list", () => {

@@ -16,24 +16,30 @@ monitoring agent, or log shipper.
 ## 1. Health check
 
 - **Endpoint:** `GET /api/health`.
-- **Contract:** `200 {"status":"ok"}` when the process is serving **and** a
-  lightweight `SELECT 1` database round-trip succeeds; `503
-  {"status":"unavailable"}` when the database is unreachable. The body carries no
-  reason; the failure is recorded server-side as the structured event
-  `health.database.unavailable`.
+- **Contract:** `200 {"status":"ok"}` when the process is serving **and** the
+  database is both reachable (a lightweight `SELECT 1` round-trip) and
+  *usable* (the rate-limit store's table exists); `503
+  {"status":"unavailable"}` otherwise. The body carries no reason; the failure
+  is recorded server-side as one of two structured events:
+  `health.database.unavailable` (the database did not answer) or
+  `health.schema.incomplete` (the database answered, but the rate-limit table
+  is missing — usually migrations that were never applied).
 - **Caching:** responses set `Cache-Control: no-store, max-age=0`.
 - **Safety:** unauthenticated (orchestrators probe it anonymously), cheap (a
-  single `SELECT 1`, no table scan), and it exposes no user data or
-  configuration.
+  `SELECT 1` plus one catalog lookup, no table scan), and it exposes no user
+  data or configuration.
 
 **Use it as the readiness probe.** Point the load balancer / orchestrator's
 readiness check at `/api/health`. Do not route traffic to an instance returning
 `503`. There is intentionally no separate liveness endpoint: every meaningful
 request needs the database, so one combined readiness probe is sufficient.
 
-Health checks deliberately do **not** attempt to verify email delivery, rate-limit
-writes, or migrations — those would add cost and coupling to a probe that must
-stay fast and non-sensitive. Use the log events in §2 for those.
+Health checks deliberately do **not** attempt to verify email delivery or
+rate-limit *writes* — those would add cost and coupling to a probe that must
+stay fast and non-sensitive. The schema check is the exception: without the
+`rate_limit_counters` table every login and registration fails closed with a
+misleading "too many attempts" message, so the probe checks that the table
+exists. Use the log events in §2 for everything else.
 
 ---
 
@@ -59,6 +65,9 @@ noise.
 | Event | Level | Meaning | Suggested response |
 | --- | --- | --- | --- |
 | `health.database.unavailable` | error | The readiness probe's DB check failed | Page if sustained; check DB connectivity / `DATABASE_URL` / TLS |
+| `health.schema.incomplete` | error | The DB answered but the rate-limit table is missing | Apply the migrations, then redeploy (§6) |
+| `rate_limit.store_unavailable` | error | The persistent rate-limit store could not be read or written | Page if sustained; check `DATABASE_URL`, TLS and the `causeCode` field (`42P01` = missing table, `28P01` = bad password) |
+| `db.pool.error` | error | An idle pooled connection failed and was discarded | Usually transient; alert only on a sustained rise |
 | `email.delivery.failed` | error | A configured email provider rejected/failed a send | Investigate provider status, key validity, verified sender domain |
 | `auth.verification.initial_email_failed` | error | The registration verification email threw unexpectedly | Investigate the email adapter; registration still succeeded |
 | `auth.verification.initial_email_undelivered` | warn | Verification email could not be sent (adapter unavailable) | Expected when email is unconfigured; alert on a *sudden* rise |
@@ -66,6 +75,14 @@ noise.
 The failure record for `email.delivery.failed` includes the adapter name and a
 sanitized provider code (e.g. `rate_limit_exceeded`) — never the recipient, the
 message, or any token.
+
+`rate_limit.store_unavailable` carries the failing operation (`check`, `hit`,
+`reset`), the affected scopes (e.g. `auth:login:ip`) and the **driver error
+code** of the underlying cause — never the identifier being limited, and never
+the driver message. A `causeCode` of `42P01` means the migrations were not
+applied to that database; `28P01` means the credentials are wrong; `3D000`
+means the database does not exist; `ECONNREFUSED` / `ENOTFOUND` / `ETIMEDOUT`
+mean the host is unreachable.
 
 > **Do not alert on message text.** Field names and message wording are not
 > stable contracts; the `event` code is.

@@ -45,14 +45,20 @@ mock `@/db`, so no container or `.env` file is needed for `pnpm test:unit`.
 ## Health check
 
 `GET /api/health` is a lightweight, unauthenticated operational probe. It runs
-a single `SELECT 1` through the existing lazy Drizzle connection and returns a
-minimal JSON body. It never touches application tables, needs no session, and
-exposes no user data or environment configuration.
+a single `SELECT 1` through the existing lazy Drizzle connection, checks that
+the rate-limit store's table exists, and returns a minimal JSON body. It never
+scans application tables, needs no session, and exposes no user data or
+environment configuration.
 
 | Status | Body                          | Meaning                                                                 |
 | ------ | ----------------------------- | ----------------------------------------------------------------------- |
-| `200`  | `{"status":"ok"}`             | The process is serving requests **and** the database round-trip succeeded (readiness). |
-| `503`  | `{"status":"unavailable"}`    | The database check failed; the instance cannot serve data-dependent requests. |
+| `200`  | `{"status":"ok"}`             | The process is serving requests **and** the database round-trip succeeded **and** the rate-limit table exists (readiness). |
+| `503`  | `{"status":"unavailable"}`    | The database is unreachable, or it is reachable but its migrations were never applied — in either case the instance cannot serve data-dependent requests. |
+
+The schema check matters: without the `rate_limit_counters` table every
+rate-limit query fails, the limiter fails **closed**, and every login and
+registration is answered with the generic "too many attempts" message — while
+a plain `SELECT 1` probe would still report the database as healthy.
 
 Responses set `Cache-Control: no-store, max-age=0` so a health verdict is never
 cached. On failure, the reason (driver message, SQL, connection string, stack)
@@ -195,8 +201,12 @@ than the unit tests do:
    `EMAIL_FROM` and `EMAIL_PROVIDER` for the spawned server), so the suite can
    never send real email.
 
-E2E tests are not part of `.github/workflows/ci.yml`, because CI has no
-database container or secrets.
+E2E tests run in CI as a separate job (`e2e` in `.github/workflows/ci.yml`):
+it starts a throwaway PostgreSQL service, applies the migrations, and runs the
+same `pnpm test:e2e` command locally. The suite is the only one that exercises
+the real persistent rate-limit store, which is why it needs a real database —
+a deployment whose migrations were never applied breaks authentication in a way
+no mocked unit test can see.
 
 ## Rate limiting
 
@@ -225,7 +235,13 @@ server process.
   scheduled job. Retention stays bounded without a scan on the request path.
 - **Store outage = fail closed.** If the database is unreachable, every
   guarded operation is denied with the generic "too many attempts" message —
-  an auth endpoint never fails open.
+  an auth endpoint never fails open. Because that answer is identical to a
+  genuinely exhausted bucket, the outage is also logged as
+  `rate_limit.store_unavailable` with the failing operation, the affected
+  scopes and the driver's error code (`42P01` = missing table, `28P01` = wrong
+  password, `3D000` = unknown database, `ECONNREFUSED` / `ETIMEDOUT` = host
+  unreachable). Alert on that event: it is the only way to tell "too many
+  attempts" caused by an outage apart from one caused by abuse.
 
 ### Trusted proxy and client IP
 
@@ -237,7 +253,10 @@ everything to its left (spoofable). With the default of `0` **no forwarding
 header is trusted**: every caller collapses to one `unknown` bucket, so per-IP
 limits still apply as a coarse backstop and header spoofing cannot evade the
 per-account/per-user limits. Set it to the real hop count in production (e.g.
-`1` behind a single load balancer). See `apps/web/src/lib/client-ip.ts`.
+`1` behind a single load balancer). A production server that starts with fewer
+than one trusted hop logs a startup warning, because that silent misconfiguration
+collapses every visitor into one shared bucket. See
+`apps/web/src/lib/client-ip.ts`.
 
 ## Local database
 

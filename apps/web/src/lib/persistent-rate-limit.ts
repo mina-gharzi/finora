@@ -133,6 +133,9 @@ export function createPersistentRateLimiter(
   }
 
   return {
+    // Diagnostic only — see `RateLimiter.scope`.
+    scope,
+
     async check(identifier): Promise<RateLimitResult> {
       const keyHash = hashRateLimitKey(scope, identifier);
       try {

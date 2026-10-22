@@ -1,4 +1,5 @@
 import "server-only";
+import { logger } from "./logger";
 import {
   createPersistentRateLimiter,
   RateLimitStoreError,
@@ -129,6 +130,47 @@ export type LimitGate =
   | { allowed: true };
 
 /**
+ * Records an unreachable rate-limit store.
+ *
+ * WHY THIS EXISTS
+ * ---------------
+ * A store outage is indistinguishable from an exhausted bucket at the HTTP
+ * boundary: both answers are the generic "too many attempts" message, so a
+ * total outage (missing migration, wrong DATABASE_URL, unreachable host) looks
+ * exactly like a burst of abuse. Without a log line the only symptom is users
+ * reporting a wrong error message and nothing in the platform logs to explain
+ * it — which is precisely how an unusable production database can hide for
+ * days.
+ *
+ * WHAT IS LOGGED
+ * --------------
+ * The operation, the affected scopes and the DRIVER ERROR CODE of the
+ * underlying cause (`42P01` undefined table, `28P01` bad password, `3D000`
+ * unknown database, `ECONNREFUSED`/`ETIMEDOUT`/`ENOTFOUND` network). No key
+ * material, no email, no IP, no connection string and no driver message are
+ * included: the code classifies the failure, and the message is deliberately
+ * left out because a driver message can echo a host name or a user name.
+ */
+function reportStoreFailure(
+  operation: "check" | "hit" | "reset",
+  limiters: ReadonlyArray<{ limiter: RateLimiter }>,
+  error: unknown,
+): void {
+  const cause = (error as { cause?: unknown } | null)?.cause;
+  const causeCode =
+    cause && typeof cause === "object" && "code" in cause
+      ? String((cause as { code: unknown }).code)
+      : undefined;
+
+  logger.error("rate_limit.store_unavailable", {
+    operation,
+    scopes: limiters.map(({ limiter }) => limiter.scope ?? "unknown"),
+    ...(causeCode ? { causeCode } : {}),
+    error,
+  });
+}
+
+/**
  * Checks every scope WITHOUT counting. Use when the event should only be
  * counted on a particular outcome (e.g. only FAILED logins count, so a
  * successful login must not add to the failed-attempt budget). Fails CLOSED on
@@ -154,6 +196,7 @@ export async function checkLimits(
     return { allowed: true };
   } catch (error) {
     if (error instanceof RateLimitStoreError) {
+      reportStoreFailure("check", checks, error);
       return { allowed: false, retryAfterSeconds: 60 };
     }
     throw error;
@@ -175,6 +218,7 @@ export async function hitLimits(
     return true;
   } catch (error) {
     if (error instanceof RateLimitStoreError) {
+      reportStoreFailure("hit", hits, error);
       return false;
     }
     throw error;
@@ -186,6 +230,8 @@ export async function hitLimits(
  * CLOSED: if the shared store is unreachable, returns the retry-after shape a
  * normal exhaustion would, so the caller denies the operation with the
  * existing generic "too many attempts" message rather than letting it through.
+ * The outage is logged as `rate_limit.store_unavailable`, so a store failure
+ * stays distinguishable from a genuinely exhausted bucket in the platform logs.
  *
  * Counting happens after the check so a denied attempt never extends a window,
  * and a successful `hit` on any scope is not rolled back if a later scope's
@@ -223,6 +269,7 @@ export async function resetLimits(
     return true;
   } catch (error) {
     if (error instanceof RateLimitStoreError) {
+      reportStoreFailure("reset", resets, error);
       return false;
     }
     throw error;

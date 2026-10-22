@@ -1,4 +1,5 @@
 import { MIN_SESSION_SECRET_LENGTH } from "./lib/auth-constants";
+import { getTrustedProxyHops } from "./lib/client-ip";
 
 /**
  * Fail-fast environment validation for a production server instance.
@@ -65,6 +66,31 @@ function warnWhenEmailDeliveryUnconfigured(): void {
   );
 }
 
+/**
+ * Advisory only — never fatal. Per-IP rate-limit buckets are derived from
+ * `x-forwarded-for` ONLY when the deployment declares how many trusted
+ * proxies sit in front of the app. With `TRUSTED_PROXY_HOPS` unset (or 0, or
+ * not a number) the forwarding headers are ignored entirely and EVERY request
+ * — from every visitor — lands in the single `"unknown"` bucket. The per-IP
+ * limits then apply to the whole site at once (e.g. 20 registrations per hour
+ * for everyone), which is indistinguishable from an abuse wave.
+ *
+ * On Vercel the platform itself is the proxy, so the correct value is `1`. The
+ * warning makes this misconfiguration visible once at startup instead of
+ * letting it surface as mysterious "too many attempts" errors. It names the
+ * variable — never its value.
+ */
+function warnWhenTrustedProxyHopsUnset(): void {
+  if (getTrustedProxyHops() >= 1) return;
+  console.warn(
+    "[finora] TRUSTED_PROXY_HOPS is unset or not a positive number: all " +
+      "clients share a single per-IP rate-limit bucket, so the per-IP limits " +
+      "(registration and login) apply to the whole site at once. Set it to the " +
+      "number of trusted reverse proxies in front of the app (1 when only " +
+      "Vercel is in front of it).",
+  );
+}
+
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   if (process.env.NEXT_PHASE === "phase-production-build") return;
@@ -72,4 +98,5 @@ export async function register(): Promise<void> {
 
   validateProductionEnv();
   warnWhenEmailDeliveryUnconfigured();
+  warnWhenTrustedProxyHopsUnset();
 }
