@@ -1,0 +1,9 @@
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.expo-shared/
+.metro-health-check*
+*.tsbuildinfo
+/android
+/ios

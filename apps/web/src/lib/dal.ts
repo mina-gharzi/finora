@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { getSessionAuth } from "./session";
+import type { SessionTokenDetails } from "./session-token";
 import {
   findUserAuthValidAfter,
   findUserById,
@@ -15,22 +16,19 @@ import {
  */
 
 /** Outcome of a single session resolution for the current request. */
-type SessionResolution =
+export type SessionResolution =
   | { status: "anonymous" }
   | { status: "invalidated" }
   | { status: "ok"; userId: string };
 
 /**
- * Resolves the session once per request scope, distinguishing "no usable
- * session" from "a cryptographically valid session the watermark has
- * revoked". The two cases need different login redirects: bouncing a revoked
- * but signed cookie straight to `/login` would loop with the proxy's
- * public-route guard (proxy.ts sends signed cookies away from the auth
- * pages, the DAL would send it back), so revoked sessions land on
- * `/login?session=expired`, which the proxy lets through.
+ * Applies the authorization policy shared by cookie sessions and mobile bearer
+ * tokens: a verified signature is necessary but not sufficient. The token must
+ * also pass the account's session-invalidation watermark.
  */
-const resolveSession = cache(async (): Promise<SessionResolution> => {
-  const auth = await getSessionAuth();
+export async function resolveSessionAuth(
+  auth: SessionTokenDetails | null,
+): Promise<SessionResolution> {
   if (!auth) {
     return { status: "anonymous" };
   }
@@ -49,7 +47,21 @@ const resolveSession = cache(async (): Promise<SessionResolution> => {
     return { status: "invalidated" };
   }
   return { status: "ok", userId: auth.userId };
-});
+}
+
+/**
+ * Resolves the session once per request scope, distinguishing "no usable
+ * session" from "a cryptographically valid session the watermark has
+ * revoked". The two cases need different login redirects: bouncing a revoked
+ * but signed cookie straight to `/login` would loop with the proxy's
+ * public-route guard (proxy.ts sends signed cookies away from the auth
+ * pages, the DAL would send it back), so revoked sessions land on
+ * `/login?session=expired`, which the proxy lets through.
+ */
+const resolveSession = cache(
+  async (): Promise<SessionResolution> =>
+    resolveSessionAuth(await getSessionAuth()),
+);
 
 /** The verified user id for this request, or null when not signed in. */
 export const getSessionUserId = cache(async (): Promise<string | null> => {

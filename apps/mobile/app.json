@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "فینورا",
+    "slug": "finora",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "finora",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#F5F5F7",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.finora.mobile"
+    },
+    "android": {
+      "package": "app.finora.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#4B1426",
+        "foregroundImage": "./assets/adaptive-icon.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-secure-store"
+    ]
+  }
+}

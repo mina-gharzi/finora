@@ -39,3 +39,6 @@ apps/web/.git-nested-backup/
 
 # Development email outbox (contains raw recovery links — never commit)
 .email-outbox/
+
+.vercel
+.env*

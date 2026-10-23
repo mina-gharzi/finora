@@ -24,6 +24,11 @@ import { verifySessionToken } from "@/lib/session-token";
  * closed here too, so the proxy never attempts HMAC verification with a key
  * the rest of the application would refuse to use.
  */
+const MOBILE_API_ROUTES = [
+  "/api/mobile/auth/login",
+  "/api/mobile/overview",
+] as const;
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   // Token pages (verification, password reset) are reachable whether or not
@@ -34,6 +39,9 @@ export async function proxy(request: NextRequest) {
   // Unauthenticated operational endpoints (e.g. the health probe) bypass the
   // login redirect entirely; they expose no user data.
   if ((PUBLIC_API_ROUTES as readonly string[]).includes(pathname)) {
+    return NextResponse.next();
+  }
+  if ((MOBILE_API_ROUTES as readonly string[]).includes(pathname)) {
     return NextResponse.next();
   }
   const isPublicRoute = (PUBLIC_ROUTES as readonly string[]).includes(pathname);

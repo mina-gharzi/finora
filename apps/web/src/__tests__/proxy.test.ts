@@ -140,6 +140,20 @@ describe("proxy route guard", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 
+  it("lets anonymous mobile API requests reach their handlers", async () => {
+    for (const path of ["/api/mobile/auth/login", "/api/mobile/overview"]) {
+      const response = await run(path);
+      expect(response.headers.get("x-middleware-next")).toBe("1");
+      expect(response.headers.get("location")).toBeNull();
+    }
+  });
+
+  it("still redirects anonymous visitors away from other API routes", async () => {
+    const response = await run("/api/private");
+    expect(response.status).toBe(307);
+    expect(locationPath(response)).toBe("/login");
+  });
+
   it("keeps a signed-in visitor on the health endpoint (no auth-page bounce)", async () => {
     const token = await signSessionToken("user-1", STRONG_SECRET);
     const response = await run("/api/health", await cookieHeader(token));
