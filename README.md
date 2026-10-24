@@ -4,7 +4,7 @@ A Persian (RTL) personal finance manager. Record income and expenses, keep cash,
 
 **[Live demo](https://finora-psi-sand.vercel.app)** · Web app live · Android app in development
 
-<!-- Add a screenshot: docs/screenshot.png -->
+![Finora dashboard](docs/screenshot.png)
 <!-- ![Finora dashboard](docs/screenshot.png) -->
 
 ## Features
