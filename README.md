@@ -1,6 +1,40 @@
 ﻿# Finora
 
-A Persian personal finance management application.
+A Persian (RTL) personal finance manager. Record income and expenses, keep cash, bank, and wallet accounts separate, set monthly budgets per category, and review reports, all on a Jalali calendar.
+
+**[Live demo](https://finora-psi-sand.vercel.app)** · Web app live · Android app in development
+
+<!-- Add a screenshot: docs/screenshot.png -->
+<!-- ![Finora dashboard](docs/screenshot.png) -->
+
+## Features
+
+- Transactions with search, filters, edit and delete, and CSV export (guarded against spreadsheet formula injection)
+- Cash, bank, and wallet accounts with balances derived from opening balance and transactions
+- Monthly per-category budgets with progress that flags approaching and exceeded limits
+- Dashboard and reports on Jalali months, including an account balance trend
+- Email verification, password recovery, and email change with single-use tokens
+- Persian RTL interface with light and dark themes
+
+## Engineering highlights
+
+- **Money is exact:** amounts are integer Toman stored as `bigint`, parsed strictly (Persian digits accepted, decimals rejected).
+- **Ownership by construction:** every user-owned table carries a non-null owner column written only from the verified session.
+- **Defence in depth:** the auth proxy is an optimistic redirect only; the session is re-verified in the data access layer on every read and action.
+- **Abuse protection:** persistent database-backed rate limiter using atomic upserts on hashed keys, failing closed.
+- **Token safety:** verification and reset tokens are stored as SHA-256 hashes and consumed by a conditional `UPDATE`.
+- **Operability:** health probe, structured logs with sensitive-field redaction, and a production runbook.
+- **Testing:** 900+ unit tests (Vitest) plus a Playwright suite that runs in CI against a throwaway PostgreSQL service.
+
+## Tech stack
+
+Next.js (App Router) · React · TypeScript · Drizzle ORM · PostgreSQL · Zod · Tailwind CSS · Resend · Vitest · Playwright · Docker · GitHub Actions · pnpm workspaces
+
+## Roadmap
+
+- [x] Web app: auth, transactions, accounts, categories, budgets, reports
+- [x] Mobile API (login and overview) with shared types in `packages/shared`
+- [ ] Android app
 
 ## Project structure
 
