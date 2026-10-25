@@ -13,7 +13,7 @@
  * The limiter is replaced with a recording fake so the KEY each scope receives
  * is observable. Real database behavior is covered elsewhere.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   ip: "203.0.113.9",
@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => ({
   hashPassword: vi.fn(async () => "hash"),
   createUser: vi.fn(),
   // Recording fake limiter factory.
-  created: [] as Array<{ scope: string; hits: string[]; checks: string[]; resets: string[] }>,
+  created: [] as Array<{ scope: string; limit: number; hits: string[]; checks: string[]; resets: string[] }>,
   failStore: false,
 }));
 
@@ -115,6 +115,10 @@ function scope(name: string) {
 }
 
 beforeEach(() => {
+  // These tests describe a deployment behind one trusted proxy, so each
+  // request gets its own per-IP bucket (see lib/client-ip.ts). Without this the
+  // address is "unknown" and uses the separate site-wide backstop instead.
+  vi.stubEnv("TRUSTED_PROXY_HOPS", "1");
   delete (globalThis as { finoraAuthLimiters?: unknown }).finoraAuthLimiters;
   mocks.created.length = 0;
   mocks.failStore = false;
@@ -157,9 +161,34 @@ describe("IP and identifier scopes are independent", () => {
     const ipScope = scope("auth:login:ip");
     expect(account.scope).not.toBe(ipScope.scope);
     expect(account.hits).toContain("a@example.com");
-    // No trusted proxy is configured, so the IP scope receives the single
-    // conservative bucket rather than a spoofable header value.
-    expect(ipScope.hits).toContain("unknown");
+    // Behind one trusted proxy the IP scope receives the real client address.
+    expect(ipScope.hits).toContain("203.0.113.9");
+    expect(scope("auth:login:ip:unknown").hits).toEqual([]);
+  });
+
+  it("counts an unidentifiable client against the separate site-wide scope, not the normal per-IP one", async () => {
+    // No trusted proxy configured: the forwarded address cannot be trusted, so
+    // it must not be used, and must not consume the normal per-IP budget that
+    // every other visitor would then share.
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "0");
+    await login("a@example.com");
+    expect(scope("auth:login:ip").hits).toEqual([]);
+    expect(scope("auth:login:ip:unknown").hits).toEqual(["unknown"]);
+  });
+
+  it("does not lock every visitor out when one unidentifiable client floods the endpoint", async () => {
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "0");
+    // Limiters are created lazily on first use.
+    await login("flood-first@example.com");
+    const normalLimit = scope("auth:login:ip").limit;
+    // More failed logins than the normal per-IP budget, each for a different
+    // email so the per-account limit never interferes.
+    for (let i = 0; i <= normalLimit; i += 1) {
+      await login(`flood${i}@example.com`);
+    }
+    // A different visitor (also unidentifiable) can still sign in.
+    const res = await login("someone-else@example.com");
+    expect(res.message).not.toContain("بیش از حد مجاز");
   });
 
   it("does not let different emails share an account counter", async () => {
@@ -191,4 +220,8 @@ describe("successful login resets only the account scope", () => {
     expect(scope("auth:login:account").resets).toContain("b@example.com");
     expect(scope("auth:login:ip").resets).toEqual([]);
   });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });

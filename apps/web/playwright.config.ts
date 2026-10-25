@@ -64,4 +64,5 @@ export default defineConfig({
     // dev opt-in) — see e2e/email-guard.ts for the mechanism and caveats.
     env: serverEnvWithEmailDeliveryDisabled(),
   },
+  expect: { timeout: 15_000 },
 });

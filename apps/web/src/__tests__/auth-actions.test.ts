@@ -1,7 +1,7 @@
 /**
  * @vitest-environment node
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findUserByEmail: vi.fn(),
@@ -80,6 +80,10 @@ const login = (email: string, password = "wrongpass1") =>
   loginAction({}, form({ email, password }));
 
 beforeEach(() => {
+  // These tests describe a deployment behind one trusted proxy, so each
+  // request gets its own per-IP bucket (see lib/client-ip.ts). Without this the
+  // address is "unknown" and uses the separate site-wide backstop instead.
+  vi.stubEnv("TRUSTED_PROXY_HOPS", "1");
   delete (globalThis as { finoraAuthLimiters?: unknown }).finoraAuthLimiters;
   Object.values(mocks).forEach((m) => typeof m === "function" && "mockClear" in m && m.mockClear());
   mocks.ip = "203.0.113.9";
@@ -358,4 +362,8 @@ describe("changePasswordAction rate limiting", () => {
     const res = await submit();
     expect(res.fieldErrors?.current ?? res.message ?? "").toBeTruthy();
   });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });

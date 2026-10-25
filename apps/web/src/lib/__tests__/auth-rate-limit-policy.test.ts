@@ -42,6 +42,7 @@ vi.mock("@/lib/persistent-rate-limit", () => {
 });
 
 import { getAuthLimiters } from "@/lib/auth-rate-limit";
+import { UNKNOWN_IP_LIMIT_MULTIPLIER } from "@/lib/ip-rate-limit";
 
 const MINUTE = 60 * 1000;
 
@@ -106,6 +107,23 @@ describe("auth rate-limit policy", () => {
     const registerIp = policy("auth:register:ip");
     expect(registerIp.limit).toBe(20);
     expect(registerIp.windowMs).toBe(60 * MINUTE);
+  });
+
+  it("gives every per-IP limiter a separate, larger budget for unknown addresses", () => {
+    getAuthLimiters();
+    for (const base of [
+      "auth:login:ip",
+      "auth:register:ip",
+      "auth:forgot:ip",
+      "auth:token:ip",
+      "auth:resend:ip",
+      "auth:change-email:ip",
+    ]) {
+      const known = policy(base);
+      const unknown = policy(`${base}:unknown`);
+      expect(unknown.limit).toBe(known.limit * UNKNOWN_IP_LIMIT_MULTIPLIER);
+      expect(unknown.windowMs).toBe(known.windowMs);
+    }
   });
 
   it("keeps every limiter within a conservative, bounded window", () => {

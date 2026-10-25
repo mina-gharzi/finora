@@ -13,10 +13,12 @@
  * `TRUSTED_PROXY_HOPS`:
  *
  *   - unset / 0 (default): no proxy is trusted. Forwarding headers are
- *     ignored and every request shares the single `"unknown"` IP bucket. The
- *     per-IP limit still applies (as one global-ish bucket) but is never
- *     spoofable. This is the safe default for the current repository, which
- *     documents no reverse-proxy architecture.
+ *     ignored and every request resolves to the single `"unknown"` address,
+ *     which is never spoofable. The per-IP limiters send that sentinel to a
+ *     separate, larger site-wide budget (`ip-rate-limit.ts`) so one client
+ *     cannot exhaust a normal per-IP budget on behalf of everyone. This is the
+ *     safe default for the current repository, which documents no
+ *     reverse-proxy architecture.
  *   - N >= 1: N proxies are trusted. The client address is the Nth entry
  *     counted from the RIGHT of XFF (the value appended by the outermost
  *     *trusted* hop). Entries to its left are attacker-controlled and

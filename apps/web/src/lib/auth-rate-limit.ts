@@ -1,4 +1,5 @@
 import "server-only";
+import { routeByClientIp, UNKNOWN_IP_LIMIT_MULTIPLIER } from "./ip-rate-limit";
 import { logger } from "./logger";
 import {
   createPersistentRateLimiter,
@@ -48,6 +49,29 @@ interface AuthLimiters {
   changePasswordUser: RateLimiter;
 }
 
+interface IpLimiterOptions {
+  scope: string;
+  limit: number;
+  windowMs: number;
+}
+
+/**
+ * Per-IP limiter with a separate, larger site-wide budget for requests whose
+ * address could not be determined (no trusted proxy configured). See
+ * `ip-rate-limit.ts` for why a shared "unknown" bucket must not use the normal
+ * per-IP limit.
+ */
+function createIpLimiter(options: IpLimiterOptions): RateLimiter {
+  return routeByClientIp(
+    createPersistentRateLimiter(options),
+    createPersistentRateLimiter({
+      scope: `${options.scope}:unknown`,
+      limit: options.limit * UNKNOWN_IP_LIMIT_MULTIPLIER,
+      windowMs: options.windowMs,
+    }),
+  );
+}
+
 const globalForLimiters = globalThis as unknown as {
   finoraAuthLimiters?: AuthLimiters;
 };
@@ -60,17 +84,17 @@ export function getAuthLimiters(): AuthLimiters {
         limit: 5,
         windowMs: FIFTEEN_MINUTES,
       }),
-      loginIp: createPersistentRateLimiter({
+      loginIp: createIpLimiter({
         scope: "auth:login:ip",
         limit: 20,
         windowMs: FIFTEEN_MINUTES,
       }),
-      registerIp: createPersistentRateLimiter({
+      registerIp: createIpLimiter({
         scope: "auth:register:ip",
         limit: 20,
         windowMs: ONE_HOUR,
       }),
-      forgotIp: createPersistentRateLimiter({
+      forgotIp: createIpLimiter({
         scope: "auth:forgot:ip",
         limit: 10,
         windowMs: ONE_HOUR,
@@ -80,7 +104,7 @@ export function getAuthLimiters(): AuthLimiters {
         limit: 3,
         windowMs: ONE_HOUR,
       }),
-      tokenIp: createPersistentRateLimiter({
+      tokenIp: createIpLimiter({
         scope: "auth:token:ip",
         limit: 20,
         windowMs: FIFTEEN_MINUTES,
@@ -90,7 +114,7 @@ export function getAuthLimiters(): AuthLimiters {
         limit: 3,
         windowMs: ONE_HOUR,
       }),
-      resendIp: createPersistentRateLimiter({
+      resendIp: createIpLimiter({
         scope: "auth:resend:ip",
         limit: 10,
         windowMs: ONE_HOUR,
@@ -103,7 +127,7 @@ export function getAuthLimiters(): AuthLimiters {
         limit: 3,
         windowMs: ONE_HOUR,
       }),
-      changeEmailIp: createPersistentRateLimiter({
+      changeEmailIp: createIpLimiter({
         scope: "auth:change-email:ip",
         limit: 10,
         windowMs: ONE_HOUR,

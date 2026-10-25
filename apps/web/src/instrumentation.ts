@@ -71,23 +71,24 @@ function warnWhenEmailDeliveryUnconfigured(): void {
  * `x-forwarded-for` ONLY when the deployment declares how many trusted
  * proxies sit in front of the app. With `TRUSTED_PROXY_HOPS` unset (or 0, or
  * not a number) the forwarding headers are ignored entirely and EVERY request
- * — from every visitor — lands in the single `"unknown"` bucket. The per-IP
- * limits then apply to the whole site at once (e.g. 20 registrations per hour
- * for everyone), which is indistinguishable from an abuse wave.
+ * — from every visitor — lands in the single `"unknown"` address. Those
+ * requests are counted against a separate, much larger site-wide backstop
+ * (see `lib/ip-rate-limit.ts`) so one client cannot lock everyone out, but the
+ * app can no longer throttle clients individually by address.
  *
  * On Vercel the platform itself is the proxy, so the correct value is `1`. The
- * warning makes this misconfiguration visible once at startup instead of
- * letting it surface as mysterious "too many attempts" errors. It names the
+ * warning makes this misconfiguration visible once at startup. It names the
  * variable — never its value.
  */
 function warnWhenTrustedProxyHopsUnset(): void {
   if (getTrustedProxyHops() >= 1) return;
   console.warn(
-    "[finora] TRUSTED_PROXY_HOPS is unset or not a positive number: all " +
-      "clients share a single per-IP rate-limit bucket, so the per-IP limits " +
-      "(registration and login) apply to the whole site at once. Set it to the " +
-      "number of trusted reverse proxies in front of the app (1 when only " +
-      "Vercel is in front of it).",
+    "[finora] TRUSTED_PROXY_HOPS is unset or not a positive number: client " +
+      "addresses cannot be determined, so all clients share one site-wide " +
+      "per-IP rate-limit bucket (with a raised ceiling). Per-IP throttling of " +
+      "individual clients is effectively off. Set it to the number of trusted " +
+      "reverse proxies in front of the app (1 when only Vercel is in front " +
+      "of it).",
   );
 }
 
