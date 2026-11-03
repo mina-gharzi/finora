@@ -199,6 +199,27 @@ describe("getAccountBalances", () => {
     ]);
   });
 
+  it("adds transfers in and subtracts transfers out", async () => {
+    h.state.selectQueue = [
+      [
+        {
+          id: "acc-1",
+          name: "بانک",
+          type: "bank",
+          openingBalance: 1000,
+          income: "0",
+          expense: "0",
+          transfersIn: "700",
+          transfersOut: "200",
+        },
+      ],
+    ];
+
+    await expect(getAccountBalances(OWNER)).resolves.toEqual([
+      { id: "acc-1", name: "بانک", type: "bank", balance: 1500 },
+    ]);
+  });
+
   it("keeps each account's rows separate across multiple accounts", async () => {
     // Distinct per-account aggregates: a bug that multiplied joined rows would
     // change these numbers.

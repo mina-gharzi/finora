@@ -217,6 +217,55 @@ export type TransactionRow = typeof transactions.$inferSelect;
 export type NewTransactionRow = typeof transactions.$inferInsert;
 
 /**
+ * Transfers of money between two accounts owned by the same user.
+ *
+ * A transfer is deliberately NOT a transaction: it moves money between the
+ * owner's own accounts, so income/expense totals, category breakdowns, budgets
+ * and reports must not see it. Both accounts are cascade-deleted FKs; the
+ * server verifies that both belong to the owner and differ from each other.
+ */
+export const transfers = pgTable(
+  "transfers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: ownerUserId(),
+    fromAccountId: uuid("from_account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    toAccountId: uuid("to_account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    amount: bigint("amount", { mode: "number" }).notNull(),
+    occurredOn: date("occurred_on", { mode: "string" }).notNull(),
+    note: text("note").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check("transfers_amount_check", sql`${table.amount} > 0`),
+    check(
+      "transfers_accounts_differ_check",
+      sql`${table.fromAccountId} <> ${table.toAccountId}`,
+    ),
+    // Newest-first listing per owner, optionally narrowed by `occurred_on`.
+    index("transfers_user_id_occurred_on_created_at_idx").on(
+      table.userId,
+      table.occurredOn.desc(),
+      table.createdAt.desc(),
+    ),
+    index("transfers_from_account_id_idx").on(table.fromAccountId),
+    index("transfers_to_account_id_idx").on(table.toAccountId),
+  ],
+);
+
+export type TransferRow = typeof transfers.$inferSelect;
+export type NewTransferRow = typeof transfers.$inferInsert;
+
+/**
  * Monthly spending budgets, one per expense category per Jalali/calendar month.
  *
  * A budget sets a positive integer Toman limit for an owner's expense category

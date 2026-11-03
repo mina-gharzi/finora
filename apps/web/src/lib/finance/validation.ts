@@ -107,3 +107,25 @@ export const budgetInputSchema = z.object({
   monthStart: isoDateSchema,
   limitAmount: positiveTomanSchema,
 });
+
+/**
+ * Creating a transfer between two of the owner's accounts. The owner id is never
+ * part of the input (unknown keys are stripped); the data-access layer verifies
+ * that both accounts belong to the session user and neither is archived.
+ */
+export const transferInputSchema = z
+  .object({
+    fromAccountId: idSchema,
+    toAccountId: idSchema,
+    amount: positiveTomanSchema,
+    occurredOn: isoDateSchema,
+    note: z
+      .string({ error: "یادداشت معتبر نیست." })
+      .trim()
+      .max(500, { error: "یادداشت بیش از حد طولانی است." })
+      .default(""),
+  })
+  .refine((value) => value.fromAccountId !== value.toAccountId, {
+    error: "حساب مبدأ و مقصد نباید یکی باشند.",
+    path: ["toAccountId"],
+  });

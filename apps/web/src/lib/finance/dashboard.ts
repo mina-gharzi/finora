@@ -1,7 +1,7 @@
 import "server-only";
 import { and, desc, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
-import { accounts, categories, transactions } from "@/db/schema";
+import { accounts, categories, transactions, transfers } from "@/db/schema";
 import { toTomanFromAggregate } from "./money";
 import type { AccountType, TransactionType } from "./types";
 
@@ -51,7 +51,7 @@ export interface AccountBalance {
   type: AccountType;
   /** True when the account is archived (still shown; money is still there). */
   archived: boolean;
-  /** opening_balance + income - expense across the account's full history. */
+  /** opening_balance + income - expense + transfers in - transfers out. */
   balance: number;
 }
 
@@ -146,12 +146,16 @@ export async function getCategoryExpenseBreakdown(
 }
 
 /**
- * Current balance of every account owned by `userId`, over full history
- * (`opening_balance + income - expense`). ARCHIVED accounts are intentionally
- * included: archiving is a lifecycle flag, not a financial event, so their
- * stored money and transactions must keep counting. A left join keeps accounts
- * that have no transactions; grouping by the account guarantees its rows are
- * not multiplied by the join.
+ * Current balance of every account owned by `userId`, over full history:
+ * `opening_balance + income - expense + transfers in - transfers out`.
+ * ARCHIVED accounts are intentionally included: archiving is a lifecycle flag,
+ * not a financial event, so their stored money and transactions must keep
+ * counting.
+ *
+ * Income/expense come from a left join on transactions; the transfer sums are
+ * correlated scalar subqueries on `accounts.id` instead of joins, because a
+ * join to `transfers` would multiply the account's transaction rows (and vice
+ * versa). Grouping by the account keeps its transaction rows from multiplying.
  */
 export async function getAccountBalances(
   userId: string,
@@ -165,6 +169,8 @@ export async function getAccountBalances(
       openingBalance: accounts.openingBalance,
       income: sql<string | null>`coalesce(sum(case when ${transactions.type} = 'income' then ${transactions.amount} else 0 end), 0)`,
       expense: sql<string | null>`coalesce(sum(case when ${transactions.type} = 'expense' then ${transactions.amount} else 0 end), 0)`,
+      transfersIn: sql<string | null>`coalesce((select sum(${transfers.amount}) from ${transfers} where ${transfers.toAccountId} = ${accounts.id}), 0)`,
+      transfersOut: sql<string | null>`coalesce((select sum(${transfers.amount}) from ${transfers} where ${transfers.fromAccountId} = ${accounts.id}), 0)`,
     })
     .from(accounts)
     .leftJoin(transactions, eq(transactions.accountId, accounts.id))
@@ -182,12 +188,19 @@ export async function getAccountBalances(
   return rows.map((row) => {
     const income = toTomanFromAggregate(row.income);
     const expense = toTomanFromAggregate(row.expense);
+    const transfersIn = toTomanFromAggregate(row.transfersIn);
+    const transfersOut = toTomanFromAggregate(row.transfersOut);
     return {
       id: row.id,
       name: row.name,
       type: row.type as AccountType,
       archived: row.archived,
-      balance: toTomanFromAggregate(row.openingBalance) + income - expense,
+      balance:
+        toTomanFromAggregate(row.openingBalance) +
+        income -
+        expense +
+        transfersIn -
+        transfersOut,
     };
   });
 }
@@ -234,7 +247,9 @@ export interface BalanceHistory {
  *
  * Archived accounts and their transactions are included, matching
  * `getAccountBalances`: archiving is a lifecycle flag, not a financial event.
- * Only `income`/`expense` exist in the model, so nothing is double-counted.
+ * Transfers are intentionally excluded: they move money between the owner's own
+ * accounts and therefore net to zero across the owner's total. Only
+ * `income`/`expense` exist in the model, so nothing is double-counted.
  */
 export async function getBalanceHistory(
   userId: string,

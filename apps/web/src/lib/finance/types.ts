@@ -63,3 +63,22 @@ export interface TransactionInput {
   occurredOn: string;
   note: string;
 }
+
+export interface Transfer {
+  id: string;
+  fromAccountId: string;
+  toAccountId: string;
+  amount: Toman;
+  /** Gregorian calendar date, `YYYY-MM-DD`. Jalali is a display concern only. */
+  occurredOn: string;
+  note: string;
+}
+
+/** Client-supplied fields only. No id, no userId. */
+export interface TransferInput {
+  fromAccountId: string;
+  toAccountId: string;
+  amount: Toman;
+  occurredOn: string;
+  note: string;
+}

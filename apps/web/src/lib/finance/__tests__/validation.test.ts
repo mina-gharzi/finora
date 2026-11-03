@@ -6,6 +6,7 @@ import {
   categoryNameInputSchema,
   isoDateSchema,
   transactionInputSchema,
+  transferInputSchema,
 } from "../validation";
 
 const uuid = "3f2b8c1e-5d4a-4e6b-9a7c-1b2c3d4e5f60";
@@ -163,6 +164,70 @@ describe("budgetInputSchema", () => {
 
   it("strips a forged userId so ownership cannot be client-supplied", () => {
     const r = budgetInputSchema.safeParse({ ...validBudget, userId: "attacker" });
+    expect(r.success).toBe(true);
+    if (r.success) expect("userId" in r.data).toBe(false);
+  });
+});
+
+describe("transferInputSchema", () => {
+  const otherUuid = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+  const validTransfer = {
+    fromAccountId: uuid,
+    toAccountId: otherUuid,
+    amount: 25000,
+    occurredOn: "2026-10-16",
+    note: "  انتقال ",
+  };
+
+  it("accepts a valid transfer and trims the note", () => {
+    const r = transferInputSchema.safeParse(validTransfer);
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.note).toBe("انتقال");
+  });
+
+  it("rejects the same account on both sides with the Persian message", () => {
+    const r = transferInputSchema.safeParse({
+      ...validTransfer,
+      toAccountId: uuid,
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(r.error.issues[0]?.message).toBe(
+        "حساب مبدأ و مقصد نباید یکی باشند.",
+      );
+    }
+  });
+
+  it.each([0, -5, 1.5, "12.5", "abc", Number.MAX_SAFE_INTEGER + 1, NaN])(
+    "rejects amount %j",
+    (amount) =>
+      expect(
+        transferInputSchema.safeParse({ ...validTransfer, amount }).success,
+      ).toBe(false),
+  );
+
+  it("rejects non-uuid account ids and a malformed date", () => {
+    expect(
+      transferInputSchema.safeParse({ ...validTransfer, fromAccountId: "1" })
+        .success,
+    ).toBe(false);
+    expect(
+      transferInputSchema.safeParse({ ...validTransfer, toAccountId: "x" })
+        .success,
+    ).toBe(false);
+    expect(
+      transferInputSchema.safeParse({
+        ...validTransfer,
+        occurredOn: "2026-02-30",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("strips a forged userId so ownership cannot be client-supplied", () => {
+    const r = transferInputSchema.safeParse({
+      ...validTransfer,
+      userId: "attacker",
+    });
     expect(r.success).toBe(true);
     if (r.success) expect("userId" in r.data).toBe(false);
   });
