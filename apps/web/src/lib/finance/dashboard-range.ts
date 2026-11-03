@@ -14,7 +14,7 @@ import { formatJalaliDateParts } from "@finora/shared";
  *   one per calendar day, so a month's first day is simply
  *   `day - (jalaliDay - 1)` and its last day is the day before the next month.
  * - "Today" is supplied by the caller as a `YYYY-MM-DD` string so the module is
- *   deterministic and testable. The page derives it in UTC.
+ *   deterministic and testable. The page derives it in Tehran time.
  */
 
 export const DASHBOARD_PERIODS = [

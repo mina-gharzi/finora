@@ -11,21 +11,13 @@ import {
   recentBudgetMonthOptions,
 } from "@/lib/finance/budgets-range";
 import { REPORT_MONTH_OPTIONS } from "@/lib/finance/reports-range";
+import { todayInTehranIso } from "@/lib/finance/today";
 
 export const metadata: Metadata = {
   title: "بودجه‌ها",
 };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
-
-/**
- * "Today" for month resolution. The stored `occurred_on` column is a calendar
- * day with no time zone, so a single deterministic reference is used (UTC), the
- * same default the shared Jalali formatter uses.
- */
-function currentUtcDateIso(now: Date = new Date()): string {
-  return now.toISOString().slice(0, 10);
-}
 
 async function AuthenticatedBudgets({
   searchParams,
@@ -34,7 +26,7 @@ async function AuthenticatedBudgets({
 }) {
   const userId = await requireUserId();
   const params = await searchParams;
-  const todayIso = currentUtcDateIso();
+  const todayIso = todayInTehranIso();
 
   // Never trust the URL: unknown or hostile month params fall back to the
   // current Jalali month.

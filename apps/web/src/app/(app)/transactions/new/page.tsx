@@ -6,14 +6,11 @@ import { requireUserId } from "@/lib/dal";
 import { listAccounts } from "@/lib/finance/accounts";
 import { listCategories } from "@/lib/finance/categories";
 import type { TransactionType } from "@/lib/finance/types";
+import { todayInTehranIso } from "@/lib/finance/today";
 
 export const metadata: Metadata = {
   title: "تراکنش جدید",
 };
-
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 async function AuthenticatedTransactionForm() {
   const userId = await requireUserId();
@@ -42,7 +39,7 @@ async function AuthenticatedTransactionForm() {
         name: category.name,
         kind: category.kind as TransactionType,
       }))}
-      defaultDate={todayIsoDate()}
+      defaultDate={todayInTehranIso()}
     />
   );
 }

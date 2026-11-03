@@ -9,13 +9,10 @@ import {
   parseDashboardPeriod,
   resolveDashboardRange,
 } from "@/lib/finance/dashboard-range";
+import { todayInTehranIso } from "@/lib/finance/today";
 import { verifyMobileBearerToken } from "@/lib/mobile/auth";
 
 const NO_STORE = { "Cache-Control": "no-store" };
-
-function currentUtcDateIso(now: Date = new Date()): string {
-  return now.toISOString().slice(0, 10);
-}
 
 export async function GET(request: Request) {
   const auth = await verifyMobileBearerToken(
@@ -32,7 +29,7 @@ export async function GET(request: Request) {
   const period: MobileDashboardPeriod = parseDashboardPeriod(
     searchParams.get("period") ?? undefined,
   );
-  const range = resolveDashboardRange(period, currentUtcDateIso());
+  const range = resolveDashboardRange(period, todayInTehranIso());
   const data = await getDashboardData(auth.userId, range);
 
   const response: MobileOverviewResponse = {

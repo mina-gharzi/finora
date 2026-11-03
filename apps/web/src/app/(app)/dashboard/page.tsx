@@ -9,6 +9,7 @@ import {
   resolveDashboardRange,
   type DashboardPeriod,
 } from "@/lib/finance/dashboard-range";
+import { todayInTehranIso } from "@/lib/finance/today";
 
 export const metadata: Metadata = {
   title: "داشبورد",
@@ -17,16 +18,6 @@ export const metadata: Metadata = {
 type SearchParams = Promise<
   Record<string, string | string[] | undefined>
 >;
-
-/**
- * "Today" for period resolution. The stored `occurred_on` column is a calendar
- * day with no time zone, so a single deterministic reference is used (UTC), the
- * same default the shared Jalali formatter uses. This is a documented
- * limitation near local midnight.
- */
-function currentUtcDateIso(now: Date = new Date()): string {
-  return now.toISOString().slice(0, 10);
-}
 
 async function AuthenticatedDashboard({
   searchParams,
@@ -38,7 +29,7 @@ async function AuthenticatedDashboard({
 
   // Never trust the URL: unknown periods fall back to the default.
   const period: DashboardPeriod = parseDashboardPeriod(params.period);
-  const range = resolveDashboardRange(period, currentUtcDateIso());
+  const range = resolveDashboardRange(period, todayInTehranIso());
 
   const data = await getDashboardData(userId, range);
 

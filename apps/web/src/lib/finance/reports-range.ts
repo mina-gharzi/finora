@@ -19,7 +19,7 @@ import {
  *   calendar through ICU (never reinterpreted or shifted).
  * - Month keys are plain integers `{ year, month }` with `month` in 1–12.
  * - "Today" is supplied by the caller as a `YYYY-MM-DD` string so the module is
- *   deterministic and testable. The page derives it in UTC.
+ *   deterministic and testable. The page derives it in Tehran time.
  *
  * Reverse resolution (Jalali key → Gregorian bounds) works by anchoring a
  * day inside Farvardin (`year + 621`-03-01 plus a bounded day scan), then

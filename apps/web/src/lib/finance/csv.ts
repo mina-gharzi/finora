@@ -1,4 +1,5 @@
 import { NO_CATEGORY_LABEL, TRANSACTION_TYPE_LABELS } from "./transaction-labels";
+import { todayInTehranIso } from "./today";
 import type { TransactionHistoryItem } from "./transactions";
 
 /**
@@ -115,8 +116,8 @@ export function buildTransactionsCsv(rows: readonly TransactionCsvRow[]): string
 }
 
 /**
- * A safe, ASCII-only download filename stamped with the export date (UTC), so
- * it needs no Content-Disposition encoding. Example:
+ * A safe, ASCII-only download filename stamped with the export date in Tehran,
+ * so it needs no Content-Disposition encoding. Example:
  * `finora-transactions-2026-10-18.csv`.
  */
 export function transactionsCsvFilename(exportedOn: string): string {
@@ -135,7 +136,7 @@ export function buildTransactionsCsvExport(
   };
 }
 
-/** Today's calendar date as `YYYY-MM-DD`, anchored to UTC. */
+/** Today's calendar date in Tehran as `YYYY-MM-DD`. */
 export function todayIsoDate(now: Date = new Date()): string {
-  return now.toISOString().slice(0, 10);
+  return todayInTehranIso(now);
 }

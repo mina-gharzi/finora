@@ -162,8 +162,8 @@ describe("download payload", () => {
 });
 
 describe("todayIsoDate", () => {
-  it("returns the UTC calendar date", () => {
-    expect(todayIsoDate(new Date("2026-10-18T23:59:59Z"))).toBe("2026-10-18");
+  it("returns the Tehran calendar date", () => {
+    expect(todayIsoDate(new Date("2026-10-18T23:59:59Z"))).toBe("2026-10-19");
     expect(todayIsoDate(new Date("2026-10-19T00:00:01Z"))).toBe("2026-10-19");
   });
 });
