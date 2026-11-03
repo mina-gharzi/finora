@@ -1,11 +1,35 @@
-import type { MobileBudgetsResponse } from "@finora/shared";
-import { getBudgetsData } from "@/lib/finance/budgets";
+import type {
+  MobileBudgetRecord,
+  MobileBudgetsResponse,
+} from "@finora/shared";
+import { createBudget, getBudgetsData } from "@/lib/finance/budgets";
 import {
   budgetsMonthFromKey,
   parseBudgetsMonthParam,
 } from "@/lib/finance/budgets-range";
 import { todayInTehranIso } from "@/lib/finance/today";
-import { authenticateMobileRequest, mobileJson } from "@/lib/mobile/http";
+import {
+  authenticateMobileRequest,
+  authenticateVerifiedMobileRequest,
+  mapDomainFailure,
+  mobileBadRequest,
+  mobileJson,
+  readJsonObject,
+} from "@/lib/mobile/http";
+
+function toBudgetRecord(budget: {
+  id: string;
+  categoryId: string;
+  monthStart: string;
+  limitAmount: number;
+}): MobileBudgetRecord {
+  return {
+    id: budget.id,
+    categoryId: budget.categoryId,
+    monthStart: budget.monthStart,
+    limitAmount: budget.limitAmount,
+  };
+}
 
 /**
  * GET /api/v1/budgets?month=YYYY-MM (Jalali)
@@ -48,4 +72,29 @@ export async function GET(request: Request) {
   };
 
   return mobileJson(response);
+}
+
+/**
+ * POST /api/v1/budgets
+ *
+ * Creates a budget for the authenticated, verified owner. The domain
+ * normalizes the month and reports a duplicate as a 409.
+ */
+export async function POST(request: Request) {
+  const auth = await authenticateVerifiedMobileRequest(request);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  const body = await readJsonObject(request);
+  if (!body) {
+    return mobileBadRequest();
+  }
+
+  const result = await createBudget(auth.userId, body);
+  if (!result.ok) {
+    return mapDomainFailure(result);
+  }
+
+  return mobileJson(toBudgetRecord(result.budget), 201);
 }

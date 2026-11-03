@@ -1,6 +1,33 @@
-import type { MobileAccountsResponse } from "@finora/shared";
+import type {
+  MobileAccountRecord,
+  MobileAccountsResponse,
+} from "@finora/shared";
+import { createAccount } from "@/lib/finance/accounts";
 import { getAccountBalances } from "@/lib/finance/dashboard";
-import { authenticateMobileRequest, mobileJson } from "@/lib/mobile/http";
+import {
+  authenticateMobileRequest,
+  authenticateVerifiedMobileRequest,
+  mapDomainFailure,
+  mobileBadRequest,
+  mobileJson,
+  readJsonObject,
+} from "@/lib/mobile/http";
+
+function toAccountRecord(account: {
+  id: string;
+  name: string;
+  type: string;
+  openingBalance: number;
+  archived: boolean;
+}): MobileAccountRecord {
+  return {
+    id: account.id,
+    name: account.name,
+    type: account.type as MobileAccountRecord["type"],
+    openingBalance: account.openingBalance,
+    archived: account.archived,
+  };
+}
 
 /**
  * GET /api/v1/accounts
@@ -27,4 +54,29 @@ export async function GET(request: Request) {
   };
 
   return mobileJson(response);
+}
+
+/**
+ * POST /api/v1/accounts
+ *
+ * Creates an account for the authenticated, verified owner. Validation and
+ * ownership are entirely the domain layer's responsibility.
+ */
+export async function POST(request: Request) {
+  const auth = await authenticateVerifiedMobileRequest(request);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  const body = await readJsonObject(request);
+  if (!body) {
+    return mobileBadRequest();
+  }
+
+  const result = await createAccount(auth.userId, body);
+  if (!result.ok) {
+    return mapDomainFailure(result);
+  }
+
+  return mobileJson(toAccountRecord(result.account), 201);
 }

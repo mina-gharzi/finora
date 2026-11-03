@@ -101,3 +101,45 @@ The 100 most recent transfers.
 ```json
 { "items": [{ "id": "tr1", "fromAccountId": "a1", "fromAccountName": "نقدی", "toAccountId": "a2", "toAccountName": "بانک", "amount": 100000, "occurredOn": "2026-01-01", "note": "" }] }
 ```
+
+## Write endpoints
+All write endpoints require a **verified email**: `403 { "error": "email_not_verified", "message": "..." }` otherwise, and `401` without a valid Bearer token. Create → `201`, update/archive/rename → `200` with the persisted record, delete → `200 { "ok": true }`. Owner ids and timestamps are never returned.
+
+### POST/PATCH/DELETE /api/v1/accounts
+- `POST` body `{ "name", "type", "openingBalance" }`
+- `PATCH /api/v1/accounts/[id]` body `{ "archived": true }`
+- `DELETE /api/v1/accounts/[id]`
+- Record: `{ "id", "name", "type", "openingBalance", "archived" }`
+
+### POST/PATCH/DELETE /api/v1/categories
+- `POST` body `{ "name", "kind" }`
+- `PATCH /api/v1/categories/[id]` body exactly one of `{ "name" }` or `{ "archived": true }`
+- `DELETE /api/v1/categories/[id]`
+- Record: `{ "id", "name", "kind", "archived" }`
+
+### POST/PUT/DELETE /api/v1/transactions
+- `POST` body `{ "accountId", "categoryId": null, "type", "amount", "occurredOn", "note" }`
+- `PUT /api/v1/transactions/[id]` same body (full replacement)
+- `DELETE /api/v1/transactions/[id]`
+- Record: `{ "id", "type", "amount", "occurredOn", "note", "accountId", "categoryId" }`
+
+### POST/PUT/DELETE /api/v1/budgets
+- `POST` body `{ "categoryId", "monthStart", "limitAmount" }`
+- `PUT /api/v1/budgets/[id]` same body
+- `DELETE /api/v1/budgets/[id]`
+- Record: `{ "id", "categoryId", "monthStart", "limitAmount" }`
+
+### POST/DELETE /api/v1/transfers
+- `POST` body `{ "fromAccountId", "toAccountId", "amount", "occurredOn", "note" }`
+- `DELETE /api/v1/transfers/[id]`
+- Record: `{ "id", "fromAccountId", "toAccountId", "amount", "occurredOn", "note" }`
+
+### Error mapping
+| Status | Error | Cause |
+| --- | --- | --- |
+| 401 | `unauthorized` | missing/invalid Bearer token |
+| 403 | `email_not_verified` | writes require a verified email |
+| 400 | `bad_request` | missing/non-object JSON body, or malformed category patch |
+| 422 | `validation_failed` | domain `fieldErrors` / reason `invalid` |
+| 404 | `not_found` | missing/foreign id, or delete returned `false` |
+| 409 | `duplicate`, `has_transactions`, … | other domain conflict; `has_transactions` includes `transactionCount` |

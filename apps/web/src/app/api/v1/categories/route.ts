@@ -1,9 +1,31 @@
 import type {
   MobileCategoriesResponse,
+  MobileCategoryRecord,
   MobileTransactionType,
 } from "@finora/shared";
-import { listCategories } from "@/lib/finance/categories";
-import { authenticateMobileRequest, mobileJson } from "@/lib/mobile/http";
+import { createCategory, listCategories } from "@/lib/finance/categories";
+import {
+  authenticateMobileRequest,
+  authenticateVerifiedMobileRequest,
+  mapDomainFailure,
+  mobileBadRequest,
+  mobileJson,
+  readJsonObject,
+} from "@/lib/mobile/http";
+
+function toCategoryRecord(category: {
+  id: string;
+  name: string;
+  kind: string;
+  archived: boolean;
+}): MobileCategoryRecord {
+  return {
+    id: category.id,
+    name: category.name,
+    kind: category.kind as MobileTransactionType,
+    archived: category.archived,
+  };
+}
 
 /**
  * GET /api/v1/categories
@@ -29,4 +51,28 @@ export async function GET(request: Request) {
   };
 
   return mobileJson(response);
+}
+
+/**
+ * POST /api/v1/categories
+ *
+ * Creates a category for the authenticated, verified owner.
+ */
+export async function POST(request: Request) {
+  const auth = await authenticateVerifiedMobileRequest(request);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  const body = await readJsonObject(request);
+  if (!body) {
+    return mobileBadRequest();
+  }
+
+  const result = await createCategory(auth.userId, body);
+  if (!result.ok) {
+    return mapDomainFailure(result);
+  }
+
+  return mobileJson(toCategoryRecord(result.category), 201);
 }

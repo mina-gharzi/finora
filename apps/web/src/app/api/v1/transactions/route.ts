@@ -1,10 +1,44 @@
-import type { MobileTransactionsResponse } from "@finora/shared";
+import type {
+  MobileTransactionRecord,
+  MobileTransactionsResponse,
+  MobileTransactionType,
+} from "@finora/shared";
 import {
   parseTransactionHistoryQuery,
   transactionSearchParamsToRecord,
 } from "@/lib/finance/history-query";
-import { listTransactionHistory } from "@/lib/finance/transactions";
-import { authenticateMobileRequest, mobileJson } from "@/lib/mobile/http";
+import {
+  createTransaction,
+  listTransactionHistory,
+} from "@/lib/finance/transactions";
+import {
+  authenticateMobileRequest,
+  authenticateVerifiedMobileRequest,
+  mapDomainFailure,
+  mobileBadRequest,
+  mobileJson,
+  readJsonObject,
+} from "@/lib/mobile/http";
+
+function toTransactionRecord(transaction: {
+  id: string;
+  type: string;
+  amount: number;
+  occurredOn: string;
+  note: string;
+  accountId: string;
+  categoryId: string | null;
+}): MobileTransactionRecord {
+  return {
+    id: transaction.id,
+    type: transaction.type as MobileTransactionType,
+    amount: transaction.amount,
+    occurredOn: transaction.occurredOn,
+    note: transaction.note,
+    accountId: transaction.accountId,
+    categoryId: transaction.categoryId,
+  };
+}
 
 /**
  * GET /api/v1/transactions?type=&accountId=&from=&to=&q=&page=
@@ -42,4 +76,29 @@ export async function GET(request: Request) {
   };
 
   return mobileJson(response);
+}
+
+/**
+ * POST /api/v1/transactions
+ *
+ * Creates a transaction for the authenticated, verified owner. The domain
+ * validates the payload, including that referenced account/category are owned.
+ */
+export async function POST(request: Request) {
+  const auth = await authenticateVerifiedMobileRequest(request);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  const body = await readJsonObject(request);
+  if (!body) {
+    return mobileBadRequest();
+  }
+
+  const result = await createTransaction(auth.userId, body);
+  if (!result.ok) {
+    return mapDomainFailure(result);
+  }
+
+  return mobileJson(toTransactionRecord(result.transaction), 201);
 }

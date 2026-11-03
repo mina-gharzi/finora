@@ -186,3 +186,54 @@ export interface MobileTransfer {
 export interface MobileTransfersResponse {
   items: MobileTransfer[];
 }
+
+/** Persisted account returned by create/archive (public fields only). */
+export interface MobileAccountRecord {
+  id: string;
+  name: string;
+  type: MobileAccountType;
+  openingBalance: number;
+  archived: boolean;
+}
+
+/** Persisted category returned by create/rename/archive. */
+export interface MobileCategoryRecord {
+  id: string;
+  name: string;
+  kind: MobileTransactionType;
+  archived: boolean;
+}
+
+/** Persisted transaction returned by create/update. */
+export interface MobileTransactionRecord {
+  id: string;
+  type: MobileTransactionType;
+  amount: number;
+  occurredOn: string;
+  note: string;
+  accountId: string;
+  categoryId: string | null;
+}
+
+/** Persisted budget returned by create/update. */
+export interface MobileBudgetRecord {
+  id: string;
+  categoryId: string;
+  monthStart: string;
+  limitAmount: number;
+}
+
+/** Persisted transfer returned by create. */
+export interface MobileTransferRecord {
+  id: string;
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  occurredOn: string;
+  note: string;
+}
+
+/** Body of every successful delete. */
+export interface MobileOkResponse {
+  ok: true;
+}
