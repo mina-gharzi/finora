@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gte, ilike, lte } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, lte } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   accounts,
@@ -260,6 +260,8 @@ export interface TransactionHistoryItem {
   accountName: string;
   /** True when the owning account has been archived (still fully visible). */
   accountArchived: boolean;
+  /** Optional so existing fixtures without a category still type-check. */
+  categoryId?: string | null;
   categoryName: string | null;
 }
 
@@ -267,6 +269,8 @@ export interface TransactionHistoryResult {
   items: TransactionHistoryItem[];
   page: number;
   pageSize: number;
+  /** Total number of matching rows across every page. */
+  total: number;
   hasMore: boolean;
 }
 
@@ -310,6 +314,7 @@ async function selectHistoryRows(
     accountId: string;
     accountName: string;
     accountArchived: boolean;
+    categoryId: string | null;
     categoryName: string | null;
   }[]
 > {
@@ -323,6 +328,7 @@ async function selectHistoryRows(
       accountId: transactions.accountId,
       accountName: accounts.name,
       accountArchived: accounts.archived,
+      categoryId: transactions.categoryId,
       categoryName: categories.name,
     })
     .from(transactions)
@@ -346,6 +352,7 @@ function toHistoryItem(row: {
   accountId: string;
   accountName: string;
   accountArchived: boolean;
+  categoryId: string | null;
   categoryName: string | null;
 }): TransactionHistoryItem {
   return {
@@ -357,6 +364,7 @@ function toHistoryItem(row: {
     accountId: row.accountId,
     accountName: row.accountName,
     accountArchived: row.accountArchived,
+    categoryId: row.categoryId,
     categoryName: row.categoryName,
   };
 }
@@ -386,10 +394,21 @@ export async function listTransactionHistory(
     offset,
   });
 
+  const [countRow] = await getDb()
+    .select({ value: count() })
+    .from(transactions)
+    .where(and(...buildHistoryConditions(userId, query)));
+
   const hasMore = rows.length > pageSize;
   const items = (hasMore ? rows.slice(0, pageSize) : rows).map(toHistoryItem);
 
-  return { items, page, pageSize, hasMore };
+  return {
+    items,
+    page,
+    pageSize,
+    total: countRow?.value ?? 0,
+    hasMore,
+  };
 }
 
 /**

@@ -148,6 +148,18 @@ describe("proxy route guard", () => {
     }
   });
 
+  it("lets versioned mobile API routes bypass the cookie redirect", async () => {
+    const response = await run("/api/v1/auth/login");
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("still redirects unauthenticated app routes to /login", async () => {
+    const response = await run("/accounts");
+    expect(response.status).toBe(307);
+    expect(locationPath(response)).toBe("/login");
+  });
+
   it("still redirects anonymous visitors away from other API routes", async () => {
     const response = await run("/api/private");
     expect(response.status).toBe(307);

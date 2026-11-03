@@ -22,6 +22,28 @@ export interface MobileLoginResponse {
   user: MobileAuthUser;
 }
 
+export interface MobileTokenPair {
+  accessToken: string;
+  /** ISO timestamp at which the access token stops working. */
+  accessTokenExpiresAt: string;
+  refreshToken: string;
+  /** ISO timestamp at which the refresh token stops working. */
+  refreshTokenExpiresAt: string;
+}
+
+export type MobileAuthLoginResponse = MobileTokenPair & {
+  user: MobileLoginResponse["user"];
+};
+
+export interface MobileRefreshRequest {
+  refreshToken: string;
+}
+
+export interface MobileApiErrorResponse {
+  error: string;
+  message: string;
+}
+
 export interface MobileOverviewTotals {
   income: number;
   expense: number;
@@ -65,4 +87,102 @@ export interface MobileOverviewResponse {
 export interface MobileApiError {
   error: "bad_request" | "unauthorized" | "rate_limited";
   message: string;
+}
+
+/** One owned account with its current balance; archived accounts included. */
+export interface MobileAccount {
+  id: string;
+  name: string;
+  type: MobileAccountType;
+  archived: boolean;
+  balance: number;
+}
+
+export interface MobileAccountsResponse {
+  items: MobileAccount[];
+}
+
+export interface MobileCategory {
+  id: string;
+  name: string;
+  kind: MobileTransactionType;
+  archived: boolean;
+}
+
+export interface MobileCategoriesResponse {
+  items: MobileCategory[];
+}
+
+/** One paginated transaction-history row. */
+export interface MobileTransactionHistoryItem {
+  id: string;
+  type: MobileTransactionType;
+  amount: number;
+  occurredOn: string;
+  note: string;
+  accountId: string;
+  accountName: string;
+  categoryId: string | null;
+  categoryName: string | null;
+}
+
+export interface MobileTransactionsResponse {
+  items: MobileTransactionHistoryItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export type MobileBudgetStatus =
+  | "ok"
+  | "approaching"
+  | "reached"
+  | "exceeded";
+
+export interface MobileBudgetProgress {
+  limit: number;
+  spending: number;
+  remaining: number;
+  percent: number;
+  status: MobileBudgetStatus;
+  overspend: number;
+}
+
+export interface MobileBudgetCategory {
+  id: string;
+  name: string;
+  archived: boolean;
+}
+
+export interface MobileBudget {
+  id: string;
+  categoryId: string;
+  categoryName: string;
+  categoryArchived: boolean;
+  monthStart: string;
+  limitAmount: number;
+  progress: MobileBudgetProgress;
+}
+
+export interface MobileBudgetsResponse {
+  monthStart: string;
+  monthEnd: string;
+  expenseCategories: MobileBudgetCategory[];
+  budgets: MobileBudget[];
+  hasExpenseCategories: boolean;
+}
+
+export interface MobileTransfer {
+  id: string;
+  fromAccountId: string;
+  fromAccountName: string;
+  toAccountId: string;
+  toAccountName: string;
+  amount: number;
+  occurredOn: string;
+  note: string;
+}
+
+export interface MobileTransfersResponse {
+  items: MobileTransfer[];
 }

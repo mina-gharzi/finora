@@ -44,6 +44,11 @@ export async function proxy(request: NextRequest) {
   if ((MOBILE_API_ROUTES as readonly string[]).includes(pathname)) {
     return NextResponse.next();
   }
+  // Every /api/v1 handler authenticates itself with a Bearer token (and returns
+  // a JSON 401), so the cookie redirect must not intercept API clients.
+  if (pathname.startsWith("/api/v1/")) {
+    return NextResponse.next();
+  }
   const isPublicRoute = (PUBLIC_ROUTES as readonly string[]).includes(pathname);
   const isLandingRoute = pathname === LANDING_ROUTE;
 

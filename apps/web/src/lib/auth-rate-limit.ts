@@ -47,6 +47,8 @@ interface AuthLimiters {
   changeEmailIp: RateLimiter;
   /** In-session password-change attempts per signed-in user. */
   changePasswordUser: RateLimiter;
+  /** Mobile refresh/logout attempts per client address. */
+  refreshIp: RateLimiter;
 }
 
 interface IpLimiterOptions {
@@ -139,6 +141,14 @@ export function getAuthLimiters(): AuthLimiters {
       changePasswordUser: createPersistentRateLimiter({
         scope: "auth:change-password:user",
         limit: 5,
+        windowMs: FIFTEEN_MINUTES,
+      }),
+      // Refresh and logout are unauthenticated calls (the refresh token itself
+      // is the credential), so they are bucketed by address. The budget is
+      // generous enough for normal rotation but bounds token guessing.
+      refreshIp: createIpLimiter({
+        scope: "auth:refresh:ip",
+        limit: 60,
         windowMs: FIFTEEN_MINUTES,
       }),
     };

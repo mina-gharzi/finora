@@ -69,6 +69,7 @@ describe("auth rate-limit policy", () => {
         "forgotIp",
         "loginAccount",
         "loginIp",
+        "refreshIp",
         "registerIp",
         "resendIp",
         "resendUser",
@@ -109,6 +110,13 @@ describe("auth rate-limit policy", () => {
     expect(registerIp.windowMs).toBe(60 * MINUTE);
   });
 
+  it("throttles refresh and logout per client address at 60 attempts per 15 minutes", () => {
+    getAuthLimiters();
+    const refreshIp = policy("auth:refresh:ip");
+    expect(refreshIp.limit).toBe(60);
+    expect(refreshIp.windowMs).toBe(15 * MINUTE);
+  });
+
   it("gives every per-IP limiter a separate, larger budget for unknown addresses", () => {
     getAuthLimiters();
     for (const base of [
@@ -118,6 +126,7 @@ describe("auth rate-limit policy", () => {
       "auth:token:ip",
       "auth:resend:ip",
       "auth:change-email:ip",
+      "auth:refresh:ip",
     ]) {
       const known = policy(base);
       const unknown = policy(`${base}:unknown`);

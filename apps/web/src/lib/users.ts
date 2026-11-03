@@ -152,3 +152,15 @@ export async function updateUserPasswordIfCurrent(
 
   return rows.length > 0;
 }
+
+/**
+ * Raises the session-invalidation watermark without touching the password, so
+ * every access token and cookie issued before now stops authenticating. Used by
+ * "sign out of all devices"; `null` (never reset) becomes `now()`.
+ */
+export async function revokeAllUserSessions(id: string): Promise<void> {
+  await getDb()
+    .update(users)
+    .set({ authValidAfter: sql`now()` })
+    .where(eq(users.id, id));
+}

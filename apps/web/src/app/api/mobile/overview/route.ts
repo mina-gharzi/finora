@@ -1,16 +1,8 @@
 import { NextResponse } from "next/server";
-import type {
-  MobileAccountType,
-  MobileDashboardPeriod,
-  MobileOverviewResponse,
-} from "@finora/shared";
-import { getDashboardData } from "@/lib/finance/dashboard";
-import {
-  parseDashboardPeriod,
-  resolveDashboardRange,
-} from "@/lib/finance/dashboard-range";
-import { todayInTehranIso } from "@/lib/finance/today";
+import type { MobileDashboardPeriod } from "@finora/shared";
+import { parseDashboardPeriod } from "@/lib/finance/dashboard-range";
 import { verifyMobileBearerToken } from "@/lib/mobile/auth";
+import { buildMobileOverview } from "@/lib/mobile/overview";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
@@ -29,32 +21,8 @@ export async function GET(request: Request) {
   const period: MobileDashboardPeriod = parseDashboardPeriod(
     searchParams.get("period") ?? undefined,
   );
-  const range = resolveDashboardRange(period, todayInTehranIso());
-  const data = await getDashboardData(auth.userId, range);
 
-  const response: MobileOverviewResponse = {
-    period,
-    rangeLabel: range.label,
-    totals: data.totals,
-    categoryBreakdown: data.categoryBreakdown,
-    accountBalances: data.accountBalances.map((account) => ({
-      id: account.id,
-      name: account.name,
-      type: account.type as MobileAccountType,
-      balance: account.balance,
-    })),
-    recentTransactions: data.recentTransactions.map((transaction) => ({
-      id: transaction.id,
-      type: transaction.type,
-      amount: transaction.amount,
-      occurredOn: transaction.occurredOn,
-      note: transaction.note,
-      accountName: transaction.accountName,
-      categoryName: transaction.categoryName,
-    })),
-    hasAccounts: data.hasAccounts,
-    hasTransactions: data.hasTransactions,
-  };
+  const response = await buildMobileOverview(auth.userId, period);
 
   return NextResponse.json(response, { status: 200, headers: NO_STORE });
 }
