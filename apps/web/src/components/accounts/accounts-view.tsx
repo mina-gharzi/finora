@@ -1,4 +1,5 @@
 import { formatTomanWithUnit } from "@finora/shared";
+import Link from "next/link";
 import { WalletIcon } from "@/components/icons";
 import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import {
@@ -50,11 +51,19 @@ export function AccountsView({ accounts, balanceById }: AccountsViewProps) {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold text-foreground">حساب‌ها</h1>
-        <p className="text-sm text-muted-foreground">
-          حساب‌های نقدی، بانکی و کیف پول خود را مدیریت کنید.
-        </p>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold text-foreground">حساب‌ها</h1>
+          <p className="text-sm text-muted-foreground">
+            حساب‌های نقدی، بانکی و کیف پول خود را مدیریت کنید.
+          </p>
+        </div>
+        <Link
+          href="/accounts/transfers"
+          className="inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-border bg-surface px-4 text-sm font-medium text-foreground transition-colors hover:bg-surface-muted"
+        >
+          انتقال بین حساب‌ها
+        </Link>
       </header>
 
       <Card>

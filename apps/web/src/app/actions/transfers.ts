@@ -38,7 +38,7 @@ function revalidateTransferPaths() {
   revalidatePath("/dashboard");
   revalidatePath("/accounts");
   revalidatePath("/reports");
-  revalidatePath("/transfers");
+  revalidatePath("/accounts/transfers");
 }
 
 /**
@@ -100,5 +100,5 @@ export async function deleteTransferAction(
   }
 
   revalidateTransferPaths();
-  redirect("/transfers");
+  redirect("/accounts/transfers");
 }
