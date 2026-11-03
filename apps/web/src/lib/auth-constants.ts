@@ -9,6 +9,12 @@ export const SESSION_COOKIE_NAME = "finora_session";
 /** Session lifetime: 7 days. */
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
+/** Mobile access-token lifetime: 15 minutes. */
+export const MOBILE_ACCESS_TOKEN_SECONDS = 60 * 15;
+
+/** Mobile refresh-token lifetime: 30 days. */
+export const MOBILE_REFRESH_TOKEN_SECONDS = 60 * 60 * 24 * 30;
+
 export const SESSION_ALGORITHM = "HS256";
 
 /**

@@ -93,6 +93,40 @@ export type AuthTokenRow = typeof authTokens.$inferSelect;
 export type NewAuthTokenRow = typeof authTokens.$inferInsert;
 
 /**
+ * Opaque refresh tokens for mobile sessions, grouped into a family per device.
+ * Only the SHA-256 hash is stored, so a database leak cannot replay a token.
+ * Rotating revokes the old row; presenting a revoked token is treated as reuse
+ * and revokes the whole family. `auth_valid_after` invalidates tokens issued
+ * before a password change, and old rows are pruned on issue.
+ */
+export const mobileRefreshTokens = pgTable(
+  "mobile_refresh_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: ownerUserId(),
+    familyId: uuid("family_id").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    deviceName: text("device_name"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (table) => [
+    // Lookups always arrive by raw token, hashed then matched exactly.
+    uniqueIndex("mobile_refresh_tokens_token_hash_idx").on(table.tokenHash),
+    index("mobile_refresh_tokens_user_id_idx").on(table.userId),
+    index("mobile_refresh_tokens_family_id_idx").on(table.familyId),
+    index("mobile_refresh_tokens_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
+export type MobileRefreshTokenRow = typeof mobileRefreshTokens.$inferSelect;
+export type NewMobileRefreshTokenRow = typeof mobileRefreshTokens.$inferInsert;
+
+/**
  * Financial accounts owned by a user. `opening_balance` is an integer number
  * of Toman (bigint in Postgres, surfaced as a JS number) and can never be
  * negative. `type` is constrained to the values the domain understands.

@@ -44,4 +44,13 @@ describe("session tokens", () => {
 
     await expect(verifySessionToken(expired, SECRET)).resolves.toBeNull();
   });
+
+  it("honours a custom lifetimeSeconds", async () => {
+    const { decodeJwt } = await import("jose");
+    const token = await signSessionToken("user-123", SECRET, 60);
+
+    const claims = decodeJwt(token);
+    expect(Number(claims.exp) - Number(claims.iat)).toBe(60);
+    await expect(verifySessionToken(token, SECRET)).resolves.toBe("user-123");
+  });
 });

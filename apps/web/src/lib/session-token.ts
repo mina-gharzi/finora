@@ -14,11 +14,12 @@ function keyFrom(secret: string): Uint8Array {
 export async function signSessionToken(
   userId: string,
   secret: string,
+  lifetimeSeconds: number = SESSION_MAX_AGE_SECONDS,
 ): Promise<string> {
   return new SignJWT({ userId })
     .setProtectedHeader({ alg: SESSION_ALGORITHM })
     .setIssuedAt()
-    .setExpirationTime(`${SESSION_MAX_AGE_SECONDS}s`)
+    .setExpirationTime(`${lifetimeSeconds}s`)
     .sign(keyFrom(secret));
 }
 
