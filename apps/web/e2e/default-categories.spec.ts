@@ -16,9 +16,11 @@ test.describe("default categories", () => {
     await expect(seedButton).toBeVisible();
     await seedButton.click();
 
-    await expect(
-      page.getByText("دسته‌بندی پیشنهادی افزوده شد."),
-    ).toBeVisible();
+    // The success message lives inside the empty state, which unmounts when the
+    // revalidated page renders the new categories — so assert the visible
+    // result (the per-kind counts) instead.
+    await expect(page.getByRole("tab", { name: "هزینه 10" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "درآمد 5" })).toBeVisible();
 
     // The starter expense category is listed immediately.
     await expect(page.getByText("خوراک و رستوران").first()).toBeVisible();
