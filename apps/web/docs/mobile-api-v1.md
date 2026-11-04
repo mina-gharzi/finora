@@ -143,3 +143,12 @@ All write endpoints require a **verified email**: `403 { "error": "email_not_ver
 | 422 | `validation_failed` | domain `fieldErrors` / reason `invalid` |
 | 404 | `not_found` | missing/foreign id, or delete returned `false` |
 | 409 | `duplicate`, `has_transactions`, … | other domain conflict; `has_transactions` includes `transactionCount` |
+
+## Idempotency
+Create (`POST`) endpoints accept an optional `Idempotency-Key` header.
+- Generate one UUID per queued action and reuse it for every retry.
+- A successful response is stored for 48 hours; retries replay it with `Idempotency-Replayed: true` and the same status/body.
+- The key is scoped to the user; the same key with a different body returns `422 { "error": "idempotency_key_reuse" }`.
+- A retry that arrives while the first attempt is still running returns `409 { "error": "request_in_progress" }`; retry shortly.
+- Failed (non-2xx) requests are not stored, so a corrected retry with the same key runs normally unless an earlier attempt already succeeded.
+- An invalid key format returns `400 { "error": "bad_request" }`.

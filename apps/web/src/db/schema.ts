@@ -6,6 +6,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -382,3 +383,41 @@ export const rateLimitCounters = pgTable(
 );
 
 export type RateLimitCounterRow = typeof rateLimitCounters.$inferSelect;
+
+/**
+ * Idempotency claims for mobile create requests. One row per (user, key) lets a
+ * retried request replay the original success instead of creating a duplicate.
+ * `response_status`/`response_body` stay NULL while the first attempt is still
+ * running; `expires_at` bounds retention so cleanup is a cheap indexed delete.
+ */
+export const mobileIdempotencyKeys = pgTable(
+  "mobile_idempotency_keys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: ownerUserId(),
+    key: text("key").notNull(),
+    requestHash: text("request_hash").notNull(),
+    responseStatus: integer("response_status"),
+    responseBody: jsonb("response_body"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check(
+      "mobile_idempotency_keys_key_check",
+      sql`length(${table.key}) between 8 and 128`,
+    ),
+    uniqueIndex("mobile_idempotency_keys_user_key_idx").on(
+      table.userId,
+      table.key,
+    ),
+    index("mobile_idempotency_keys_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
+export type MobileIdempotencyKeyRow =
+  typeof mobileIdempotencyKeys.$inferSelect;
+export type NewMobileIdempotencyKeyRow =
+  typeof mobileIdempotencyKeys.$inferInsert;

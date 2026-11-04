@@ -29,6 +29,81 @@ const mocks = vi.hoisted(() => ({
   deleteTransfer: vi.fn(),
 }));
 
+const idem = vi.hoisted(() => ({
+  rows: [] as Array<Record<string, unknown>>,
+}));
+
+vi.mock("@/db", () => {
+  function insertChain() {
+    let values: Record<string, unknown> = {};
+    const chain = {
+      values: (value: Record<string, unknown>) => {
+        values = value;
+        return chain;
+      },
+      onConflictDoNothing: () => chain,
+      returning: () => {
+        const exists = idem.rows.some(
+          (row) => row.userId === values.userId && row.key === values.key,
+        );
+        if (exists) {
+          return Promise.resolve([]);
+        }
+
+        const row = {
+          id: `row-${idem.rows.length + 1}`,
+          responseStatus: null,
+          responseBody: null,
+          createdAt: new Date(),
+          ...values,
+        };
+        idem.rows.push(row);
+        return Promise.resolve([{ id: row.id }]);
+      },
+    };
+    return chain;
+  }
+
+  function deleteChain() {
+    return { where: () => Promise.resolve(undefined) };
+  }
+
+  function selectChain() {
+    const chain = {
+      from: () => chain,
+      where: () => chain,
+      limit: () => Promise.resolve([...idem.rows]),
+    };
+    return chain;
+  }
+
+  function updateChain() {
+    let values: Record<string, unknown> = {};
+    const chain = {
+      set: (value: Record<string, unknown>) => {
+        values = value;
+        return chain;
+      },
+      where: () => {
+        for (const row of idem.rows) {
+          Object.assign(row, values);
+        }
+        return Promise.resolve(undefined);
+      },
+    };
+    return chain;
+  }
+
+  return {
+    getDb: () => ({
+      insert: insertChain,
+      delete: deleteChain,
+      select: selectChain,
+      update: updateChain,
+    }),
+  };
+});
+
 vi.mock("@/lib/mobile/auth", () => ({
   verifyMobileBearerToken: mocks.verifyMobileBearerToken,
 }));
@@ -143,19 +218,25 @@ const DOMAIN_MOCKS = [
   mocks.deleteTransfer,
 ];
 
-function request(body = "{}"): Request {
+function request(body = "{}", key?: string): Request {
+  const headers = new Headers({
+    "content-type": "application/json",
+    authorization: "Bearer token-1",
+  });
+  if (key !== undefined) {
+    headers.set("Idempotency-Key", key);
+  }
+
   return new Request("http://127.0.0.1:3000/api/v1", {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: "Bearer token-1",
-    },
+    headers,
     body,
   });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  idem.rows = [];
   mocks.verifyMobileBearerToken.mockResolvedValue({
     ok: true,
     userId: USER_ID,
@@ -308,6 +389,32 @@ describe("mutating route adapters", () => {
       categoryId: null,
     });
     expect(JSON.stringify(payload)).not.toContain('"userId"');
+  });
+
+  it("creates a transaction only once when retried with the same Idempotency-Key", async () => {
+    mocks.createTransaction.mockResolvedValue({
+      ok: true,
+      transaction: TRANSACTION_ROW,
+    });
+
+    const body = JSON.stringify({
+      accountId: ID,
+      categoryId: null,
+      type: "expense",
+      amount: 5000,
+      occurredOn: "2026-01-01",
+      note: "",
+    });
+    const key = "retry-key-12345678";
+
+    const first = await transactionsCreate(request(body, key));
+    const second = await transactionsCreate(request(body, key));
+
+    expect(mocks.createTransaction).toHaveBeenCalledTimes(1);
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(second.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(await second.json()).toEqual(await first.json());
   });
 
   it("ignores a body-supplied userId when creating an account", async () => {

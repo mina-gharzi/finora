@@ -12,6 +12,7 @@ import {
   mobileJson,
   readJsonObject,
 } from "@/lib/mobile/http";
+import { withIdempotency } from "@/lib/mobile/idempotency";
 
 function toAccountRecord(account: {
   id: string;
@@ -68,15 +69,17 @@ export async function POST(request: Request) {
     return auth.response;
   }
 
-  const body = await readJsonObject(request);
-  if (!body) {
-    return mobileBadRequest();
-  }
+  return withIdempotency(request, auth.userId, async () => {
+    const body = await readJsonObject(request);
+    if (!body) {
+      return mobileBadRequest();
+    }
 
-  const result = await createAccount(auth.userId, body);
-  if (!result.ok) {
-    return mapDomainFailure(result);
-  }
+    const result = await createAccount(auth.userId, body);
+    if (!result.ok) {
+      return mapDomainFailure(result);
+    }
 
-  return mobileJson(toAccountRecord(result.account), 201);
+    return mobileJson(toAccountRecord(result.account), 201);
+  });
 }

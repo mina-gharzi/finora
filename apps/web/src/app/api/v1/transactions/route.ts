@@ -19,6 +19,7 @@ import {
   mobileJson,
   readJsonObject,
 } from "@/lib/mobile/http";
+import { withIdempotency } from "@/lib/mobile/idempotency";
 
 function toTransactionRecord(transaction: {
   id: string;
@@ -90,15 +91,17 @@ export async function POST(request: Request) {
     return auth.response;
   }
 
-  const body = await readJsonObject(request);
-  if (!body) {
-    return mobileBadRequest();
-  }
+  return withIdempotency(request, auth.userId, async () => {
+    const body = await readJsonObject(request);
+    if (!body) {
+      return mobileBadRequest();
+    }
 
-  const result = await createTransaction(auth.userId, body);
-  if (!result.ok) {
-    return mapDomainFailure(result);
-  }
+    const result = await createTransaction(auth.userId, body);
+    if (!result.ok) {
+      return mapDomainFailure(result);
+    }
 
-  return mobileJson(toTransactionRecord(result.transaction), 201);
+    return mobileJson(toTransactionRecord(result.transaction), 201);
+  });
 }

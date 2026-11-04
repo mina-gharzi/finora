@@ -12,6 +12,7 @@ import {
   mobileJson,
   readJsonObject,
 } from "@/lib/mobile/http";
+import { withIdempotency } from "@/lib/mobile/idempotency";
 
 function toCategoryRecord(category: {
   id: string;
@@ -64,15 +65,17 @@ export async function POST(request: Request) {
     return auth.response;
   }
 
-  const body = await readJsonObject(request);
-  if (!body) {
-    return mobileBadRequest();
-  }
+  return withIdempotency(request, auth.userId, async () => {
+    const body = await readJsonObject(request);
+    if (!body) {
+      return mobileBadRequest();
+    }
 
-  const result = await createCategory(auth.userId, body);
-  if (!result.ok) {
-    return mapDomainFailure(result);
-  }
+    const result = await createCategory(auth.userId, body);
+    if (!result.ok) {
+      return mapDomainFailure(result);
+    }
 
-  return mobileJson(toCategoryRecord(result.category), 201);
+    return mobileJson(toCategoryRecord(result.category), 201);
+  });
 }
