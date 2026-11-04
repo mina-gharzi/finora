@@ -198,6 +198,83 @@ export type CategoryRow = typeof categories.$inferSelect;
 export type NewCategoryRow = typeof categories.$inferInsert;
 
 /**
+ * Recurring income/expense rules. Each rule describes a weekly or monthly
+ * schedule and is materialized lazily into ordinary `transactions` rows when
+ * the owner's pages load. `generated_through` is the watermark: the last day
+ * already processed (or NULL before the first run), so generation is
+ * idempotent and can safely run on every request.
+ *
+ * Note/amount/account/category follow transaction semantics. A null
+ * `category_id` is allowed, and deleting a category keeps the rule (and any
+ * generated rows) by setting the reference to NULL.
+ */
+export const recurringTransactions = pgTable(
+  "recurring_transactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: ownerUserId(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    categoryId: uuid("category_id").references(() => categories.id, {
+      onDelete: "set null",
+    }),
+    type: text("type").notNull(),
+    amount: bigint("amount", { mode: "number" }).notNull(),
+    note: text("note").notNull().default(""),
+    frequency: text("frequency").notNull(),
+    dayOfMonth: integer("day_of_month"),
+    weekday: integer("weekday"),
+    startOn: date("start_on", { mode: "string" }).notNull(),
+    endOn: date("end_on", { mode: "string" }),
+    generatedThrough: date("generated_through", { mode: "string" }),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "recurring_transactions_type_check",
+      sql`${table.type} in ('income', 'expense')`,
+    ),
+    check(
+      "recurring_transactions_amount_check",
+      sql`${table.amount} > 0`,
+    ),
+    check(
+      "recurring_transactions_frequency_check",
+      sql`${table.frequency} in ('weekly', 'monthly')`,
+    ),
+    check(
+      "recurring_transactions_day_of_month_check",
+      sql`(${table.frequency} = 'monthly') = (${table.dayOfMonth} is not null) and (${table.dayOfMonth} is null or (${table.dayOfMonth} between 1 and 31))`,
+    ),
+    check(
+      "recurring_transactions_weekday_check",
+      sql`(${table.frequency} = 'weekly') = (${table.weekday} is not null) and (${table.weekday} is null or (${table.weekday} between 0 and 6))`,
+    ),
+    check(
+      "recurring_transactions_end_on_check",
+      sql`${table.endOn} is null or ${table.endOn} >= ${table.startOn}`,
+    ),
+    index("recurring_transactions_user_id_active_idx").on(
+      table.userId,
+      table.active,
+    ),
+    index("recurring_transactions_account_id_idx").on(table.accountId),
+  ],
+);
+
+export type RecurringTransactionRow =
+  typeof recurringTransactions.$inferSelect;
+export type NewRecurringTransactionRow =
+  typeof recurringTransactions.$inferInsert;
+
+/**
  * Income/expense transactions. Amounts are integer Toman (always positive; the
  * `type` column carries the direction) stored as bigint. The owning user is
  * denormalized onto the row and the owning account is a cascade-deleted
@@ -215,6 +292,10 @@ export const transactions = pgTable(
     categoryId: uuid("category_id").references(() => categories.id, {
       onDelete: "set null",
     }),
+    recurringId: uuid("recurring_id").references(
+      () => recurringTransactions.id,
+      { onDelete: "set null" },
+    ),
     type: text("type").notNull(),
     amount: bigint("amount", { mode: "number" }).notNull(),
     occurredOn: date("occurred_on", { mode: "string" }).notNull(),
@@ -245,6 +326,10 @@ export const transactions = pgTable(
       table.createdAt.desc(),
     ),
     index("transactions_account_id_idx").on(table.accountId),
+    uniqueIndex("transactions_recurring_id_occurred_on_idx").on(
+      table.recurringId,
+      table.occurredOn,
+    ),
   ],
 );
 

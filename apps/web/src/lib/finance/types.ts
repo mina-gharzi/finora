@@ -82,3 +82,24 @@ export interface TransferInput {
   occurredOn: string;
   note: string;
 }
+
+export const RECURRING_FREQUENCIES = ["weekly", "monthly"] as const;
+export type RecurringFrequency = (typeof RECURRING_FREQUENCIES)[number];
+
+/** Client-supplied fields only. No id, no userId, no watermark. */
+export interface RecurringInput {
+  accountId: string;
+  categoryId: string | null;
+  type: TransactionType;
+  amount: Toman;
+  note: string;
+  frequency: RecurringFrequency;
+  /** Jalali day of month (1..31); required for monthly rules. */
+  dayOfMonth: number | null;
+  /** JS `getUTCDay` value (0 = Sunday); required for weekly rules. */
+  weekday: number | null;
+  /** Gregorian calendar date, `YYYY-MM-DD`. */
+  startOn: string;
+  /** Inclusive end date, or null for an open-ended rule. */
+  endOn: string | null;
+}

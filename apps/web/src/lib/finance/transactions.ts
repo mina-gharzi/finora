@@ -98,7 +98,7 @@ interface ReferenceOptions {
  * so archived options can never be chosen for new rows while existing rows stay
  * editable in place on their own archived references.
  */
-async function resolveReferences(
+export async function resolveReferences(
   userId: string,
   accountId: string,
   categoryId: string | null,

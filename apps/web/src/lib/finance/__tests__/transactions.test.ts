@@ -53,6 +53,7 @@ function transactionRow(overrides: Partial<TransactionRow> = {}): TransactionRow
     userId: OWNER,
     accountId: ACCOUNT_ID,
     categoryId: null,
+    recurringId: null,
     type: "expense",
     amount: 25000,
     occurredOn: "2026-10-16",

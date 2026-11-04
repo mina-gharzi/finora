@@ -5,6 +5,7 @@ import {
   categoryInputSchema,
   categoryNameInputSchema,
   isoDateSchema,
+  recurringInputSchema,
   transactionInputSchema,
   transferInputSchema,
 } from "../validation";
@@ -226,6 +227,138 @@ describe("transferInputSchema", () => {
   it("strips a forged userId so ownership cannot be client-supplied", () => {
     const r = transferInputSchema.safeParse({
       ...validTransfer,
+      userId: "attacker",
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect("userId" in r.data).toBe(false);
+  });
+});
+
+describe("recurringInputSchema", () => {
+  const validMonthly = {
+    accountId: uuid,
+    categoryId: uuid,
+    type: "expense",
+    amount: 25000,
+    note: "  اجاره ",
+    frequency: "monthly",
+    dayOfMonth: 15,
+    startOn: "2026-10-16",
+    endOn: null,
+  };
+
+  const validWeekly = {
+    ...validMonthly,
+    frequency: "weekly",
+    dayOfMonth: null,
+    weekday: 5,
+  };
+
+  it("accepts a monthly rule and trims the note", () => {
+    const r = recurringInputSchema.safeParse(validMonthly);
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.note).toBe("اجاره");
+  });
+
+  it("accepts a weekly rule and defaults endOn to null", () => {
+    const { endOn: _e, ...rest } = validWeekly;
+    const r = recurringInputSchema.safeParse(rest);
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.endOn).toBeNull();
+  });
+
+  it("requires dayOfMonth for monthly rules and forbids weekday", () => {
+    const missing = recurringInputSchema.safeParse({
+      ...validMonthly,
+      dayOfMonth: null,
+    });
+    expect(missing.success).toBe(false);
+    if (!missing.success) {
+      expect(missing.error.issues[0]?.message).toBe("روز ماه را وارد کنید.");
+    }
+
+    const both = recurringInputSchema.safeParse({
+      ...validMonthly,
+      weekday: 2,
+    });
+    expect(both.success).toBe(false);
+  });
+
+  it("requires weekday for weekly rules and forbids dayOfMonth", () => {
+    const missing = recurringInputSchema.safeParse({
+      ...validWeekly,
+      weekday: null,
+    });
+    expect(missing.success).toBe(false);
+    if (!missing.success) {
+      expect(missing.error.issues[0]?.message).toBe("روز هفته را وارد کنید.");
+    }
+
+    const both = recurringInputSchema.safeParse({
+      ...validWeekly,
+      dayOfMonth: 3,
+    });
+    expect(both.success).toBe(false);
+  });
+
+  it.each([0, 32, 1.5])("rejects dayOfMonth %j", (dayOfMonth) => {
+    expect(
+      recurringInputSchema.safeParse({ ...validMonthly, dayOfMonth }).success,
+    ).toBe(false);
+  });
+
+  it.each([-1, 7, 1.5])("rejects weekday %j", (weekday) => {
+    expect(
+      recurringInputSchema.safeParse({ ...validWeekly, weekday }).success,
+    ).toBe(false);
+  });
+
+  it.each([0, -5, 1.5, "12.5", "abc", Number.MAX_SAFE_INTEGER + 1, NaN])(
+    "rejects amount %j",
+    (amount) => {
+      expect(
+        recurringInputSchema.safeParse({ ...validMonthly, amount }).success,
+      ).toBe(false);
+    },
+  );
+
+  it("rejects endOn before startOn with the Persian message", () => {
+    const r = recurringInputSchema.safeParse({
+      ...validMonthly,
+      endOn: "2026-10-15",
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(
+        r.error.issues.some(
+          (issue) =>
+            issue.path[0] === "endOn" &&
+            issue.message === "تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.",
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it("rejects non-uuid references and a malformed start date", () => {
+    expect(
+      recurringInputSchema.safeParse({ ...validMonthly, accountId: "1" })
+        .success,
+    ).toBe(false);
+    expect(
+      recurringInputSchema.safeParse({ ...validMonthly, categoryId: "1" })
+        .success,
+    ).toBe(false);
+    expect(
+      recurringInputSchema.safeParse({
+        ...validMonthly,
+        startOn: "2026-02-30",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("strips a forged userId so ownership cannot be client-supplied", () => {
+    const r = recurringInputSchema.safeParse({
+      ...validMonthly,
       userId: "attacker",
     });
     expect(r.success).toBe(true);

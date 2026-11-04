@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { parseTomanAmount, MAX_TOMAN } from "./money";
-import { ACCOUNT_TYPES, TRANSACTION_TYPES } from "./types";
+import { ACCOUNT_TYPES, RECURRING_FREQUENCIES, TRANSACTION_TYPES } from "./types";
 
 /**
  * Validation boundary for financial input. Schemas intentionally contain no
@@ -128,4 +128,83 @@ export const transferInputSchema = z
   .refine((value) => value.fromAccountId !== value.toAccountId, {
     error: "حساب مبدأ و مقصد نباید یکی باشند.",
     path: ["toAccountId"],
+  });
+
+/**
+ * Creating a recurring rule. Schedule fields are mutually exclusive: monthly
+ * rules carry `dayOfMonth` (the Jalali day, 1..31) and no weekday, while weekly
+ * rules carry `weekday` (JS `getUTCDay`, 0 = Sunday) and no day of month.
+ * `endOn` is optional and must not precede `startOn`.
+ */
+export const recurringInputSchema = z
+  .object({
+    accountId: idSchema,
+    categoryId: idSchema.nullable(),
+    type: z.enum(TRANSACTION_TYPES, { error: "نوع تراکنش معتبر نیست." }),
+    amount: positiveTomanSchema,
+    note: z
+      .string({ error: "یادداشت معتبر نیست." })
+      .trim()
+      .max(500, { error: "یادداشت بیش از حد طولانی است." })
+      .default(""),
+    frequency: z.enum(RECURRING_FREQUENCIES, {
+      error: "تکرار معتبر نیست.",
+    }),
+    dayOfMonth: z
+      .number({ error: "روز ماه معتبر نیست." })
+      .int({ error: "روز ماه معتبر نیست." })
+      .min(1, { error: "روز ماه باید بین ۱ تا ۳۱ باشد." })
+      .max(31, { error: "روز ماه باید بین ۱ تا ۳۱ باشد." })
+      .nullable()
+      .default(null),
+    weekday: z
+      .number({ error: "روز هفته معتبر نیست." })
+      .int({ error: "روز هفته معتبر نیست." })
+      .min(0, { error: "روز هفته باید بین ۰ تا ۶ باشد." })
+      .max(6, { error: "روز هفته باید بین ۰ تا ۶ باشد." })
+      .nullable()
+      .default(null),
+    startOn: isoDateSchema,
+    endOn: isoDateSchema.nullable().default(null),
+  })
+  .superRefine((value, ctx) => {
+    if (value.frequency === "monthly") {
+      if (value.dayOfMonth === null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["dayOfMonth"],
+          message: "روز ماه را وارد کنید.",
+        });
+      }
+      if (value.weekday !== null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["weekday"],
+          message: "برای تکرار ماهانه، روز هفته را مشخص نکنید.",
+        });
+      }
+    } else {
+      if (value.weekday === null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["weekday"],
+          message: "روز هفته را وارد کنید.",
+        });
+      }
+      if (value.dayOfMonth !== null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["dayOfMonth"],
+          message: "برای تکرار هفتگی، روز ماه را مشخص نکنید.",
+        });
+      }
+    }
+
+    if (value.endOn !== null && value.endOn < value.startOn) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["endOn"],
+        message: "تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.",
+      });
+    }
   });

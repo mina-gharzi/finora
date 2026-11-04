@@ -71,6 +71,13 @@
       "when": 1793698919575,
       "tag": "0009_loose_earthquake",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793781944674,
+      "tag": "0010_clammy_silver_sable",
+      "breakpoints": true
     }
   ]
 }
