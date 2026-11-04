@@ -16,6 +16,7 @@ import {
   renameCategory,
   setCategoryArchived,
 } from "@/lib/finance/categories";
+import { seedDefaultCategories } from "@/lib/finance/default-categories";
 
 const GENERIC_RENAME_ERROR = "دسته‌بندی موردنظر یافت نشد.";
 const GENERIC_DELETE_ERROR = "دسته‌بندی موردنظر یافت نشد.";
@@ -191,5 +192,30 @@ export async function setCategoryArchivedAction(
     message: archived
       ? "دسته‌بندی بایگانی شد. تراکنش‌های قبلی آن همچنان در دسترس‌اند."
       : "دسته‌بندی از بایگانی خارج شد.",
+  };
+}
+
+/**
+ * Seeds the starter categories for the authenticated user. Idempotent: only the
+ * missing defaults are added, so a repeated click is harmless and reports that
+ * nothing was left to add. The owner id comes exclusively from the session.
+ */
+export async function seedDefaultCategoriesAction(
+  _prevState: CategoryFormState,
+): Promise<CategoryFormState> {
+  const userId = await requireUserId();
+  if (!(await isEmailVerified(userId))) {
+    return { status: "error", message: VERIFY_EMAIL_REQUIRED_MESSAGE };
+  }
+
+  const { inserted } = await seedDefaultCategories(userId);
+  revalidatePath("/categories");
+
+  return {
+    status: "success",
+    message:
+      inserted > 0
+        ? `${inserted} دسته‌بندی پیشنهادی افزوده شد.`
+        : "همه دسته‌بندی‌های پیشنهادی از قبل وجود دارند.",
   };
 }

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/cn";
+import { OnboardingChecklist } from "./onboarding-checklist";
 import {
   DASHBOARD_PERIODS,
   buildDashboardHref,
@@ -88,6 +89,8 @@ export interface DashboardViewProps {
   hasAccounts: boolean;
   /** Whether the owner has any transaction at all. */
   hasTransactions: boolean;
+  /** Whether the owner has any budget at all. Defaults to false. */
+  hasBudgets?: boolean;
 }
 
 /**
@@ -106,6 +109,7 @@ export function DashboardView({
   recentTransactions,
   hasAccounts,
   hasTransactions,
+  hasBudgets = false,
 }: DashboardViewProps) {
   const outlook = netOutlook(totals.net);
   const expenseTotal = categoryBreakdown.reduce(
@@ -129,6 +133,12 @@ export function DashboardView({
           افزودن تراکنش
         </Link>
       </header>
+
+      <OnboardingChecklist
+        hasAccounts={hasAccounts}
+        hasTransactions={hasTransactions}
+        hasBudgets={hasBudgets}
+      />
 
       {!hasAccounts ? (
         <EmptyState

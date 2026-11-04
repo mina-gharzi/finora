@@ -14,6 +14,7 @@ vi.mock("@/app/actions/categories", () => ({
   renameCategoryAction: vi.fn(),
   deleteCategoryAction: vi.fn(),
   setCategoryArchivedAction: vi.fn(),
+  seedDefaultCategoriesAction: vi.fn(),
 }));
 
 vi.mock("react", async () => {
@@ -389,5 +390,45 @@ describe("DeleteCategoryButton", () => {
     expect(
       screen.getByText("این دسته‌بندی در 3 تراکنش استفاده شده است."),
     ).toBeTruthy();
+  });
+});
+
+describe("CategoriesView — suggested categories", () => {
+  it("offers the seed button in the empty state when the user has no categories", () => {
+    render(<CategoriesView categories={[]} />);
+
+    expect(
+      screen.getByRole("button", { name: "افزودن دسته‌بندی‌های پیشنهادی" }),
+    ).toBeTruthy();
+  });
+
+  it("does not offer the seed button once any category exists", () => {
+    render(
+      <CategoriesView
+        categories={[
+          { id: "cat-1", name: "حقوق", kind: "income", archived: false },
+        ]}
+      />,
+    );
+
+    // The expense tab still shows its per-type empty state, but the user is
+    // not new, so starter categories are not suggested.
+    expect(
+      screen.getByRole("heading", {
+        level: 2,
+        name: "هنوز دسته‌بندی هزینه‌ای ثبت نشده است",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "افزودن دسته‌بندی‌های پیشنهادی" }),
+    ).toBeNull();
+  });
+
+  it("hides the seed button when the caller reports existing categories", () => {
+    render(<CategoriesView categories={[]} hasAnyCategories />);
+
+    expect(
+      screen.queryByRole("button", { name: "افزودن دسته‌بندی‌های پیشنهادی" }),
+    ).toBeNull();
   });
 });

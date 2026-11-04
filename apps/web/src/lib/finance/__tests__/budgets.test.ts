@@ -32,6 +32,7 @@ import {
   createBudget,
   deleteBudget,
   getBudgetsData,
+  hasAnyBudgets,
   listBudgetsWithProgress,
   listExpenseCategories,
   normalizeMonthStart,
@@ -482,5 +483,23 @@ describe("getBudgetsData", () => {
 
     expect(data.hasExpenseCategories).toBe(false);
     expect(data.budgets).toEqual([]);
+  });
+});
+
+describe("hasAnyBudgets", () => {
+  it("is true when an owner-scoped budget exists", async () => {
+    h.state.selectQueue = [[{ id: BUDGET_ID }]];
+
+    await expect(hasAnyBudgets(OWNER)).resolves.toBe(true);
+
+    const { sql, params } = serialize(lastWhere());
+    expect(sql).toContain("user_id");
+    expect(params).toContain(OWNER);
+  });
+
+  it("is false for a fresh owner", async () => {
+    h.state.selectQueue = [[]];
+
+    await expect(hasAnyBudgets(OWNER)).resolves.toBe(false);
   });
 });

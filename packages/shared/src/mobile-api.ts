@@ -82,6 +82,7 @@ export interface MobileOverviewResponse {
   recentTransactions: MobileOverviewTransaction[];
   hasAccounts: boolean;
   hasTransactions: boolean;
+  hasBudgets: boolean;
 }
 
 export interface MobileApiError {

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { Spinner } from "@/components/ui/spinner";
 import { requireUserId } from "@/lib/dal";
+import { hasAnyBudgets } from "@/lib/finance/budgets";
 import { getDashboardData } from "@/lib/finance/dashboard";
 import {
   parseDashboardPeriod,
@@ -31,7 +32,10 @@ async function AuthenticatedDashboard({
   const period: DashboardPeriod = parseDashboardPeriod(params.period);
   const range = resolveDashboardRange(period, todayInTehranIso());
 
-  const data = await getDashboardData(userId, range);
+  const [data, hasBudgets] = await Promise.all([
+    getDashboardData(userId, range),
+    hasAnyBudgets(userId),
+  ]);
 
   return (
     <DashboardView
@@ -43,6 +47,7 @@ async function AuthenticatedDashboard({
       recentTransactions={data.recentTransactions}
       hasAccounts={data.hasAccounts}
       hasTransactions={data.hasTransactions}
+      hasBudgets={hasBudgets}
     />
   );
 }

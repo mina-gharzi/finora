@@ -11,6 +11,8 @@ import {
 import { getClientIp } from "@/lib/client-ip";
 import { requireUserId } from "@/lib/dal";
 import { isUniqueViolation } from "@/lib/db-errors";
+import { seedDefaultCategories } from "@/lib/finance/default-categories";
+import { logger } from "@/lib/logger";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import {
   INVALID_CREDENTIALS_MESSAGE,
@@ -80,6 +82,14 @@ export async function registerAction(
     }
     // Anything else (connection loss, etc.) is a real failure, not a duplicate.
     throw error;
+  }
+
+  // Best-effort starter categories. A seeding failure never fails registration:
+  // the categories page offers the same seed action as a recovery path.
+  try {
+    await seedDefaultCategories(userId);
+  } catch (error) {
+    logger.error("categories.seed_failed", { error });
   }
 
   // Best-effort first verification email. Failures never fail registration:

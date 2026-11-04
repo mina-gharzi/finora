@@ -5,6 +5,7 @@ import type {
   MobileDashboardPeriod,
   MobileOverviewResponse,
 } from "@finora/shared";
+import { hasAnyBudgets } from "@/lib/finance/budgets";
 import { getDashboardData } from "@/lib/finance/dashboard";
 import { resolveDashboardRange } from "@/lib/finance/dashboard-range";
 import { todayInTehranIso } from "@/lib/finance/today";
@@ -19,7 +20,10 @@ export async function buildMobileOverview(
   period: MobileDashboardPeriod,
 ): Promise<MobileOverviewResponse> {
   const range = resolveDashboardRange(period, todayInTehranIso());
-  const data = await getDashboardData(userId, range);
+  const [data, hasBudgets] = await Promise.all([
+    getDashboardData(userId, range),
+    hasAnyBudgets(userId),
+  ]);
 
   return {
     period,
@@ -43,5 +47,6 @@ export async function buildMobileOverview(
     })),
     hasAccounts: data.hasAccounts,
     hasTransactions: data.hasTransactions,
+    hasBudgets,
   };
 }

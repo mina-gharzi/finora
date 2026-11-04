@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   createSession: vi.fn(async () => {}),
   deleteSession: vi.fn(async () => {}),
   sendInitialVerificationEmail: vi.fn(async () => {}),
+  seedDefaultCategories: vi.fn(async () => ({ inserted: 15 })),
+  loggerError: vi.fn(),
   ip: "203.0.113.9",
 }));
 
@@ -47,6 +49,12 @@ vi.mock("@/lib/session", () => ({
 }));
 vi.mock("@/app/actions/account-recovery", () => ({
   sendInitialVerificationEmail: mocks.sendInitialVerificationEmail,
+}));
+vi.mock("@/lib/finance/default-categories", () => ({
+  seedDefaultCategories: mocks.seedDefaultCategories,
+}));
+vi.mock("@/lib/logger", () => ({
+  logger: { error: mocks.loggerError },
 }));
 // The auth actions delegate to the database-backed limiter. Swap it for the
 // pure in-memory implementation so policy wiring (which scope, which key) is
@@ -194,6 +202,38 @@ describe("registerAction verification email", () => {
     mocks.sendInitialVerificationEmail.mockResolvedValueOnce("unavailable" as never);
 
     await expect(submit()).rejects.toThrow("NEXT_REDIRECT:/");
+  });
+});
+
+describe("registerAction starter categories", () => {
+  const submit = () =>
+    registerAction(
+      {},
+      form({ name: "نام تست", email: "new@example.com", password: "password1" }),
+    );
+
+  it("seeds the starter categories once for the new account", async () => {
+    mocks.findUserByEmail.mockResolvedValue(null);
+    mocks.createUser.mockResolvedValue({ id: "new" });
+
+    await expect(submit()).rejects.toThrow("NEXT_REDIRECT:/");
+
+    expect(mocks.seedDefaultCategories).toHaveBeenCalledTimes(1);
+    expect(mocks.seedDefaultCategories).toHaveBeenCalledWith("new");
+  });
+
+  it("still completes registration when seeding fails", async () => {
+    mocks.findUserByEmail.mockResolvedValue(null);
+    mocks.createUser.mockResolvedValue({ id: "new" });
+    mocks.seedDefaultCategories.mockRejectedValueOnce(new Error("db down"));
+
+    await expect(submit()).rejects.toThrow("NEXT_REDIRECT:/");
+
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      "categories.seed_failed",
+      expect.anything(),
+    );
+    expect(mocks.sendInitialVerificationEmail).toHaveBeenCalled();
   });
 });
 

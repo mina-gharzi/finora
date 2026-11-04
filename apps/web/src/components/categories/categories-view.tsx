@@ -16,6 +16,7 @@ import { CreateCategoryForm } from "./create-category-form";
 import { ArchiveCategoryButton } from "./archive-category-button";
 import { DeleteCategoryButton } from "./delete-category-button";
 import { RenameCategoryForm } from "./rename-category-form";
+import { SeedCategoriesButton } from "./seed-categories-button";
 
 /** Minimal category shape exposed to the client (no owner id or timestamps). */
 export interface CategoryItem {
@@ -27,6 +28,12 @@ export interface CategoryItem {
 
 export interface CategoriesViewProps {
   categories: CategoryItem[];
+  /**
+   * Whether the user owns any category at all (either kind, archived included).
+   * Used to offer the starter categories only to a genuinely new user; defaults
+   * to the visible list so existing callers keep working.
+   */
+  hasAnyCategories?: boolean;
 }
 
 const PANEL_ID = "categories-panel";
@@ -51,7 +58,10 @@ function emptyTitle(kind: TransactionType): string {
  * they can no longer be picked for new transactions. It holds no session or
  * data-fetching concerns so it can be unit tested.
  */
-export function CategoriesView({ categories }: CategoriesViewProps) {
+export function CategoriesView({
+  categories,
+  hasAnyCategories = categories.length > 0,
+}: CategoriesViewProps) {
   const [activeKind, setActiveKind] = useState<TransactionType>("expense");
 
   const byKind: Record<TransactionType, CategoryItem[]> = {
@@ -157,6 +167,9 @@ export function CategoriesView({ categories }: CategoriesViewProps) {
               icon={<CategoryIcon width={24} height={24} />}
               title={emptyTitle(activeKind)}
               description="با فرم بالا اولین دسته‌بندی را برای این نوع اضافه کنید."
+              action={
+                hasAnyCategories ? undefined : <SeedCategoriesButton />
+              }
             />
           ) : (
             <ul className="flex flex-col gap-3">

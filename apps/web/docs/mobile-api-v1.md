@@ -70,7 +70,7 @@ and dates are Gregorian `YYYY-MM-DD`.
 ### GET /api/v1/overview?period=this-month|prev-month|all-time
 `MobileOverviewResponse` (identical to the legacy `/api/mobile/overview`):
 ```json
-{ "period": "this-month", "rangeLabel": "...", "totals": { "income": 0, "expense": 0, "net": 0 }, "categoryBreakdown": [], "accountBalances": [], "recentTransactions": [], "hasAccounts": true, "hasTransactions": true }
+{ "period": "this-month", "rangeLabel": "...", "totals": { "income": 0, "expense": 0, "net": 0 }, "categoryBreakdown": [], "accountBalances": [], "recentTransactions": [], "hasAccounts": true, "hasTransactions": true, "hasBudgets": false }
 ```
 
 ### GET /api/v1/accounts

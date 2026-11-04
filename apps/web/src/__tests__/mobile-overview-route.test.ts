@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   verifyMobileBearerToken: vi.fn(),
   getDashboardData: vi.fn(),
+  hasAnyBudgets: vi.fn(),
 }));
 
 vi.mock("@/lib/mobile/auth", () => ({
@@ -14,6 +15,10 @@ vi.mock("@/lib/mobile/auth", () => ({
 
 vi.mock("@/lib/finance/dashboard", () => ({
   getDashboardData: mocks.getDashboardData,
+}));
+
+vi.mock("@/lib/finance/budgets", () => ({
+  hasAnyBudgets: mocks.hasAnyBudgets,
 }));
 
 import { GET } from "@/app/api/mobile/overview/route";
@@ -52,11 +57,13 @@ const dashboardData = {
 beforeEach(() => {
   mocks.verifyMobileBearerToken.mockReset();
   mocks.getDashboardData.mockReset();
+  mocks.hasAnyBudgets.mockReset();
   mocks.verifyMobileBearerToken.mockResolvedValue({
     ok: true,
     userId: "user-1",
   });
   mocks.getDashboardData.mockResolvedValue(dashboardData);
+  mocks.hasAnyBudgets.mockResolvedValue(true);
 });
 
 describe("GET /api/mobile/overview", () => {
@@ -72,6 +79,7 @@ describe("GET /api/mobile/overview", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.json()).toEqual({ error: "unauthorized" });
     expect(mocks.getDashboardData).not.toHaveBeenCalled();
+    expect(mocks.hasAnyBudgets).not.toHaveBeenCalled();
   });
 
   it("derives the user from the verified token and forwards the period", async () => {
@@ -90,6 +98,7 @@ describe("GET /api/mobile/overview", () => {
       totals: { income: 100, expense: 40, net: 60 },
       hasAccounts: true,
       hasTransactions: true,
+      hasBudgets: true,
     });
     expect(body.categoryBreakdown[0]).toEqual({
       categoryId: null,
@@ -113,6 +122,16 @@ describe("GET /api/mobile/overview", () => {
       "user-1",
       expect.objectContaining({ period: "this-month" }),
     );
+  });
+
+  it("reports whether the owner has any budget", async () => {
+    mocks.hasAnyBudgets.mockResolvedValue(false);
+
+    const response = await GET(overviewRequest());
+    const body = await response.json();
+
+    expect(mocks.hasAnyBudgets).toHaveBeenCalledWith("user-1");
+    expect(body.hasBudgets).toBe(false);
   });
 
   it("does not disguise a data read failure as an auth failure", async () => {

@@ -262,3 +262,49 @@ describe("DashboardView — recent transactions", () => {
     expect(link.getAttribute("href")).toBe("/?period=all-time");
   });
 });
+
+describe("DashboardView — onboarding checklist", () => {
+  function stepFor(name: string) {
+    return screen.getByRole("link", { name }).closest("li");
+  }
+
+  it("shows the three first-run steps with links", () => {
+    renderView({ hasAccounts: false, hasTransactions: false, hasBudgets: false });
+
+    expect(
+      screen.getByRole("heading", { level: 2, name: "شروع سریع" }),
+    ).toBeTruthy();
+
+    expect(
+      screen.getByRole("link", { name: "ساخت اولین حساب" }).getAttribute("href"),
+    ).toBe("/accounts");
+    expect(
+      screen
+        .getByRole("link", { name: "ثبت اولین تراکنش" })
+        .getAttribute("href"),
+    ).toBe("/transactions/new");
+    expect(
+      screen.getByRole("link", { name: "تعیین اولین بودجه" }).getAttribute("href"),
+    ).toBe("/budgets");
+  });
+
+  it("marks each step as done from its corresponding flag", () => {
+    renderView({ hasAccounts: true, hasTransactions: false, hasBudgets: false });
+
+    expect(
+      within(stepFor("ساخت اولین حساب")!).getByText("انجام شد"),
+    ).toBeTruthy();
+    expect(
+      within(stepFor("ثبت اولین تراکنش")!).getByText("در انتظار"),
+    ).toBeTruthy();
+    expect(
+      within(stepFor("تعیین اولین بودجه")!).getByText("در انتظار"),
+    ).toBeTruthy();
+  });
+
+  it("is absent once all three steps are done", () => {
+    renderView({ hasAccounts: true, hasTransactions: true, hasBudgets: true });
+
+    expect(screen.queryByText("شروع سریع")).toBeNull();
+  });
+});

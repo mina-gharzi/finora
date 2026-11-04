@@ -16,6 +16,7 @@ async function AuthenticatedCategories() {
 
   return (
     <CategoriesView
+      hasAnyCategories={categories.length > 0}
       categories={categories.map((category) => ({
         id: category.id,
         name: category.name,

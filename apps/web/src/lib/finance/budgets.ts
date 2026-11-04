@@ -396,3 +396,14 @@ export async function getBudgetsData(
 export function previousMonthStart(iso: string): string {
   return startOfJalaliMonth(addDays(startOfJalaliMonth(iso), -1));
 }
+
+/** True when the owner has recorded at least one budget, ever. */
+export async function hasAnyBudgets(userId: string): Promise<boolean> {
+  const [row] = await getDb()
+    .select({ id: budgets.id })
+    .from(budgets)
+    .where(eq(budgets.userId, userId))
+    .limit(1);
+
+  return Boolean(row);
+}
