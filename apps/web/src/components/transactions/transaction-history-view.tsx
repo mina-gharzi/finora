@@ -109,6 +109,12 @@ export function TransactionHistoryView({
           >
             افزودن تراکنش
           </Link>
+          <Link
+            href="/transactions/recurring"
+            className="inline-flex h-10 shrink-0 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
+          >
+            تراکنش‌های تکرارشونده
+          </Link>
           <Link href={exportHref} className={HEADER_LINK}>
             خروجی CSV
           </Link>
