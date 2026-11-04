@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
+import { isEmailVerificationRequired } from "./env";
 
 /**
  * Data access for accounts. Only server code may import this module.
@@ -106,7 +107,8 @@ export async function createUser(input: {
 /**
  * True once the user has proven control of their address. A missing account
  * counts as unverified (the caller already holds a session; the user row is
- * gone, so no privileged write should proceed).
+ * gone, so no privileged write should proceed). When verification is disabled
+ * by the pre-launch switch, every existing account counts as verified.
  */
 export async function isEmailVerifiedFor(id: string): Promise<boolean> {
   const [row] = await getDb()
@@ -115,7 +117,13 @@ export async function isEmailVerifiedFor(id: string): Promise<boolean> {
     .where(eq(users.id, id))
     .limit(1);
 
-  return Boolean(row?.emailVerifiedAt);
+  if (!row) {
+    return false;
+  }
+
+  return isEmailVerificationRequired()
+    ? Boolean(row.emailVerifiedAt)
+    : true;
 }
 
 /**

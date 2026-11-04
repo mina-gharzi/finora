@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   getDatabaseUrl,
   getSessionSecret,
+  isEmailVerificationRequired,
   shouldSeedDefaultCategories,
 } from "@/lib/env";
 
@@ -12,6 +13,7 @@ afterEach(() => {
   delete process.env.SESSION_SECRET;
   delete process.env.DATABASE_URL;
   delete process.env.SEED_DEFAULT_CATEGORIES;
+  delete process.env.EMAIL_VERIFICATION_REQUIRED;
 });
 
 describe("required environment access", () => {
@@ -67,5 +69,30 @@ describe("default category seeding switch", () => {
 
     process.env.SEED_DEFAULT_CATEGORIES = "true";
     expect(shouldSeedDefaultCategories()).toBe(true);
+  });
+});
+
+describe("email verification switch", () => {
+  it("is required when unset", () => {
+    delete process.env.EMAIL_VERIFICATION_REQUIRED;
+    expect(isEmailVerificationRequired()).toBe(true);
+  });
+
+  it("is disabled only by an explicit false", () => {
+    process.env.EMAIL_VERIFICATION_REQUIRED = "false";
+    expect(isEmailVerificationRequired()).toBe(false);
+  });
+
+  it("trims and ignores case", () => {
+    process.env.EMAIL_VERIFICATION_REQUIRED = " FALSE ";
+    expect(isEmailVerificationRequired()).toBe(false);
+  });
+
+  it("treats other values as required", () => {
+    process.env.EMAIL_VERIFICATION_REQUIRED = "0";
+    expect(isEmailVerificationRequired()).toBe(true);
+
+    process.env.EMAIL_VERIFICATION_REQUIRED = "true";
+    expect(isEmailVerificationRequired()).toBe(true);
   });
 });

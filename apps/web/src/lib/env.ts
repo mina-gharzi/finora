@@ -48,6 +48,18 @@ export function shouldSeedDefaultCategories(): boolean {
   );
 }
 
+/**
+ * Pre-launch switch: when `EMAIL_VERIFICATION_REQUIRED` is exactly "false"
+ * (trimmed, case-insensitive) financial writes no longer wait for email
+ * verification. Email stays the account identifier; verification pages,
+ * emails and data remain in place.
+ */
+export function isEmailVerificationRequired(): boolean {
+  return (
+    process.env.EMAIL_VERIFICATION_REQUIRED?.trim().toLowerCase() !== "false"
+  );
+}
+
 /** Default origin used to build absolute links in outgoing emails. */
 const DEFAULT_APP_URL = "http://127.0.0.1:3000";
 
