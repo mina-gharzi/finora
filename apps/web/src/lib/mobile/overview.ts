@@ -8,6 +8,7 @@ import type {
 import { hasAnyBudgets } from "@/lib/finance/budgets";
 import { getDashboardData } from "@/lib/finance/dashboard";
 import { resolveDashboardRange } from "@/lib/finance/dashboard-range";
+import { ensureRecurringUpToDateSafe } from "@/lib/finance/recurring";
 import { todayInTehranIso } from "@/lib/finance/today";
 
 /**
@@ -19,6 +20,7 @@ export async function buildMobileOverview(
   userId: string,
   period: MobileDashboardPeriod,
 ): Promise<MobileOverviewResponse> {
+  await ensureRecurringUpToDateSafe(userId);
   const range = resolveDashboardRange(period, todayInTehranIso());
   const [data, hasBudgets] = await Promise.all([
     getDashboardData(userId, range),

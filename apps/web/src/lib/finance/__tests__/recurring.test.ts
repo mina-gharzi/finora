@@ -23,10 +23,11 @@ const h = vi.hoisted(() => ({
     updateCalls: 0,
     deleteCalls: 0,
     whereConditions: [] as unknown[],
+    nextSelectError: undefined as unknown,
   },
 }));
 
-function makeChain(resolveTo: unknown[]) {
+function makeChain(resolveTo: unknown[], rejectWith?: unknown) {
   const state = h.state;
   const chain: Record<string, unknown> = {
     from: () => chain,
@@ -54,7 +55,10 @@ function makeChain(resolveTo: unknown[]) {
     then: (
       onFulfilled?: (value: unknown[]) => unknown,
       onRejected?: (reason: unknown) => unknown,
-    ) => Promise.resolve(resolveTo).then(onFulfilled, onRejected),
+    ) =>
+      rejectWith === undefined
+        ? Promise.resolve(resolveTo).then(onFulfilled, onRejected)
+        : Promise.reject(rejectWith).then(onFulfilled, onRejected),
   };
   return chain;
 }
@@ -62,7 +66,11 @@ function makeChain(resolveTo: unknown[]) {
 vi.mock("@/db", () => {
   const state = h.state;
   const db = {
-    select: () => makeChain(state.selectQueue.shift() ?? []),
+    select: () => {
+      const error = state.nextSelectError;
+      state.nextSelectError = undefined;
+      return makeChain(state.selectQueue.shift() ?? [], error);
+    },
     insert: () => {
       state.insertCalls += 1;
       return makeChain(state.insertReturningQueue.shift() ?? []);
@@ -84,8 +92,11 @@ import {
   createRecurring,
   deleteRecurring,
   ensureRecurringUpToDate,
+  ensureRecurringUpToDateSafe,
   materializeRecurringForUser,
+  setRecurringActive,
 } from "@/lib/finance/recurring";
+import { logger } from "@/lib/logger";
 
 const OWNER = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
@@ -141,6 +152,7 @@ beforeEach(() => {
   state.updateCalls = 0;
   state.deleteCalls = 0;
   state.whereConditions = [];
+  state.nextSelectError = undefined;
 });
 
 describe("createRecurring — ownership", () => {
@@ -311,6 +323,76 @@ describe("ensureRecurringUpToDate", () => {
       { created: 1 },
     );
     expect(h.state.insertCalls).toBe(1);
+  });
+});
+
+describe("setRecurringActive", () => {
+  it("resuming moves the watermark to yesterday and skips the paused period", async () => {
+    h.state.updateReturningQueue = [[ruleRow()]];
+
+    await expect(setRecurringActive(OWNER, RULE_ID, true)).resolves.toBe(true);
+
+    const update = h.state.updatedValues[0] as {
+      active: boolean;
+      generatedThrough: unknown;
+    };
+    expect(update.active).toBe(true);
+    const { sql, params } = new PgDialect().sqlToQuery(
+      update.generatedThrough as never,
+    );
+    expect(sql).toContain("greatest");
+    expect(params).toContain(addDays(today, -1));
+
+    // Materializing with yesterday's watermark only creates today's occurrence.
+    const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
+    h.state.selectQueue = [
+      [
+        ruleRow({
+          frequency: "weekly",
+          weekday,
+          startOn: addDays(today, -60),
+          generatedThrough: addDays(today, -1),
+        }),
+      ],
+    ];
+    h.state.insertReturningQueue = [[{ id: "a" }]];
+
+    const result = await materializeRecurringForUser(OWNER, today);
+
+    expect(result.created).toBe(1);
+    expect(h.state.insertedValues[0]).toEqual([
+      expect.objectContaining({ occurredOn: today }),
+    ]);
+  });
+
+  it("pausing leaves the watermark untouched", async () => {
+    h.state.updateReturningQueue = [[ruleRow()]];
+
+    await expect(setRecurringActive(OWNER, RULE_ID, false)).resolves.toBe(
+      true,
+    );
+
+    const update = h.state.updatedValues[0] as Record<string, unknown>;
+    expect(update.active).toBe(false);
+    expect(update).not.toHaveProperty("generatedThrough");
+  });
+});
+
+describe("ensureRecurringUpToDateSafe", () => {
+  it("swallows a thrown error and logs once", async () => {
+    const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => {});
+    h.state.nextSelectError = new Error("database down");
+
+    await expect(
+      ensureRecurringUpToDateSafe(OWNER),
+    ).resolves.toBeUndefined();
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "recurring.materialize.error",
+      expect.objectContaining({ error: expect.any(Error) }),
+    );
+    errorSpy.mockRestore();
   });
 });
 

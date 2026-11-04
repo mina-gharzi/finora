@@ -6,6 +6,7 @@ import type { TransactionHistoryItem } from "@/lib/finance/transactions";
 
 const h = vi.hoisted(() => ({
   requireUserId: vi.fn<() => Promise<string>>(),
+  ensureRecurringFresh: vi.fn<(userId: string) => Promise<void>>(),
   listTransactionHistoryForExport: vi.fn<
     (
       userId: string,
@@ -22,6 +23,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock("@/lib/dal", () => ({
   requireUserId: h.requireUserId,
+  ensureRecurringFresh: h.ensureRecurringFresh,
 }));
 
 vi.mock("@/lib/finance/transactions", () => ({
@@ -67,8 +69,10 @@ function decodeBytes(bytes: Uint8Array): string {
 
 beforeEach(() => {
   h.requireUserId.mockReset();
+  h.ensureRecurringFresh.mockReset();
   h.listTransactionHistoryForExport.mockReset();
   h.requireUserId.mockResolvedValue(OWNER);
+  h.ensureRecurringFresh.mockResolvedValue();
   h.listTransactionHistoryForExport.mockResolvedValue([]);
 });
 
@@ -109,6 +113,7 @@ describe("GET /transactions/export", () => {
     );
 
     expect(h.requireUserId).toHaveBeenCalledTimes(1);
+    expect(h.ensureRecurringFresh).toHaveBeenCalledWith(OWNER);
     expect(h.listTransactionHistoryForExport).toHaveBeenCalledWith(OWNER, {
       type: "expense",
       accountId: ACCOUNT_ID,

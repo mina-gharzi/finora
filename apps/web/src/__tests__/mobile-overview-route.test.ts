@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   verifyMobileBearerToken: vi.fn(),
   getDashboardData: vi.fn(),
   hasAnyBudgets: vi.fn(),
+  ensureRecurringUpToDateSafe: vi.fn(),
 }));
 
 vi.mock("@/lib/mobile/auth", () => ({
@@ -19,6 +20,10 @@ vi.mock("@/lib/finance/dashboard", () => ({
 
 vi.mock("@/lib/finance/budgets", () => ({
   hasAnyBudgets: mocks.hasAnyBudgets,
+}));
+
+vi.mock("@/lib/finance/recurring", () => ({
+  ensureRecurringUpToDateSafe: mocks.ensureRecurringUpToDateSafe,
 }));
 
 import { GET } from "@/app/api/mobile/overview/route";
@@ -58,6 +63,7 @@ beforeEach(() => {
   mocks.verifyMobileBearerToken.mockReset();
   mocks.getDashboardData.mockReset();
   mocks.hasAnyBudgets.mockReset();
+  mocks.ensureRecurringUpToDateSafe.mockReset();
   mocks.verifyMobileBearerToken.mockResolvedValue({
     ok: true,
     userId: "user-1",
@@ -89,6 +95,7 @@ describe("GET /api/mobile/overview", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(mocks.verifyMobileBearerToken).toHaveBeenCalledWith("Bearer token-1");
+    expect(mocks.ensureRecurringUpToDateSafe).toHaveBeenCalledWith("user-1");
     expect(mocks.getDashboardData).toHaveBeenCalledWith(
       "user-1",
       expect.objectContaining({ period: "prev-month" }),

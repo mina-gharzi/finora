@@ -8,6 +8,7 @@ import {
   findUserById,
   isEmailVerifiedFor,
 } from "./users";
+import { ensureRecurringUpToDateSafe } from "./finance/recurring";
 
 /**
  * Data Access Layer. All session and identity reads go through here so that
@@ -78,6 +79,14 @@ export const requireUserId = cache(async (): Promise<string> => {
   redirect(
     resolution.status === "invalidated" ? "/login?session=expired" : "/login",
   );
+});
+
+/**
+ * Materializes any due recurring rows once per render pass. Cached so several
+ * callers in the same request share a single run. Failures never propagate.
+ */
+export const ensureRecurringFresh = cache(async (userId: string) => {
+  await ensureRecurringUpToDateSafe(userId);
 });
 
 /**

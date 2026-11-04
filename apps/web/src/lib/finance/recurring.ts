@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, isNull, lt, lte, or } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   accounts,
@@ -8,6 +8,7 @@ import {
   transactions,
   type RecurringTransactionRow,
 } from "@/db/schema";
+import { logger } from "@/lib/logger";
 import { toFieldErrors } from "../validation";
 import { addDays } from "./dashboard-range";
 import { occurrencesBetween } from "./recurring-schedule";
@@ -132,7 +133,13 @@ export async function listRecurring(
   }));
 }
 
-/** Enables or pauses one owned rule; foreign/malformed ids report false. */
+/**
+ * Enables or pauses one owned rule; foreign/malformed ids report false.
+ *
+ * Resuming moves the watermark to yesterday (never backwards), so the paused
+ * period is not backfilled while an occurrence dated today is still generated.
+ * Pausing leaves the watermark untouched.
+ */
 export async function setRecurringActive(
   userId: string,
   recurringId: string,
@@ -144,7 +151,15 @@ export async function setRecurringActive(
 
   const updated = await getDb()
     .update(recurringTransactions)
-    .set({ active, updatedAt: new Date() })
+    .set(
+      active
+        ? {
+            active,
+            updatedAt: new Date(),
+            generatedThrough: sql`greatest(${recurringTransactions.generatedThrough}, ${addDays(todayInTehranIso(), -1)})`,
+          }
+        : { active, updatedAt: new Date() },
+    )
     .where(
       and(
         eq(recurringTransactions.id, recurringId),
@@ -325,4 +340,19 @@ export async function ensureRecurringUpToDate(
   }
 
   return materializeRecurringForUser(userId, todayIso);
+}
+
+/**
+ * Never-throwing wrapper for page renders and API reads: a materialization
+ * failure must not take down the request. The error is logged without user
+ * identifiers, notes or amounts.
+ */
+export async function ensureRecurringUpToDateSafe(
+  userId: string,
+): Promise<void> {
+  try {
+    await ensureRecurringUpToDate(userId);
+  } catch (error) {
+    logger.error("recurring.materialize.error", { error });
+  }
 }

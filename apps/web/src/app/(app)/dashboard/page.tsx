@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { Spinner } from "@/components/ui/spinner";
-import { requireUserId } from "@/lib/dal";
+import { ensureRecurringFresh, requireUserId } from "@/lib/dal";
 import { hasAnyBudgets } from "@/lib/finance/budgets";
 import { getDashboardData } from "@/lib/finance/dashboard";
 import {
@@ -26,6 +26,7 @@ async function AuthenticatedDashboard({
   searchParams: SearchParams;
 }) {
   const userId = await requireUserId();
+  await ensureRecurringFresh(userId);
   const params = await searchParams;
 
   // Never trust the URL: unknown periods fall back to the default.

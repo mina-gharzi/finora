@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { BudgetsView } from "@/components/budgets/budgets-view";
 import { Spinner } from "@/components/ui/spinner";
-import { requireUserId } from "@/lib/dal";
+import { ensureRecurringFresh, requireUserId } from "@/lib/dal";
 import { getBudgetsData } from "@/lib/finance/budgets";
 import {
   BUDGETS_MONTH_PARAM,
@@ -25,6 +25,7 @@ async function AuthenticatedBudgets({
   searchParams: SearchParams;
 }) {
   const userId = await requireUserId();
+  await ensureRecurringFresh(userId);
   const params = await searchParams;
   const todayIso = todayInTehranIso();
 

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   listTransactionHistory: vi.fn(),
   getBudgetsData: vi.fn(),
   listTransfers: vi.fn(),
+  ensureRecurringUpToDateSafe: vi.fn(),
 }));
 
 vi.mock("@/lib/mobile/auth", () => ({
@@ -36,6 +37,10 @@ vi.mock("@/lib/finance/budgets", () => ({
 
 vi.mock("@/lib/finance/transfers", () => ({
   listTransfers: mocks.listTransfers,
+}));
+
+vi.mock("@/lib/finance/recurring", () => ({
+  ensureRecurringUpToDateSafe: mocks.ensureRecurringUpToDateSafe,
 }));
 
 import { GET as overviewGET } from "@/app/api/v1/overview/route";
@@ -99,6 +104,7 @@ describe("versioned mobile read routes", () => {
       mocks.listTransactionHistory,
       mocks.getBudgetsData,
       mocks.listTransfers,
+      mocks.ensureRecurringUpToDateSafe,
     ]) {
       expect(domain).not.toHaveBeenCalled();
     }
@@ -115,6 +121,7 @@ describe("versioned mobile read routes", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.getAccountBalances).toHaveBeenCalledWith(USER_ID);
+    expect(mocks.ensureRecurringUpToDateSafe).toHaveBeenCalledWith(USER_ID);
     expect(body).toEqual({
       items: [
         { id: "a1", name: "نقدی", type: "cash", archived: false, balance: 500 },

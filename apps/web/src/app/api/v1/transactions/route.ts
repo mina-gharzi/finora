@@ -11,6 +11,7 @@ import {
   createTransaction,
   listTransactionHistory,
 } from "@/lib/finance/transactions";
+import { ensureRecurringUpToDateSafe } from "@/lib/finance/recurring";
 import {
   authenticateMobileRequest,
   authenticateVerifiedMobileRequest,
@@ -52,6 +53,8 @@ export async function GET(request: Request) {
   if (!auth.ok) {
     return auth.response;
   }
+
+  await ensureRecurringUpToDateSafe(auth.userId);
 
   const { searchParams } = new URL(request.url);
   const query = parseTransactionHistoryQuery(

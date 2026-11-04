@@ -276,9 +276,14 @@ export function TransactionHistoryView({
                     className="border-b border-border last:border-0"
                   >
                     <td className="px-5 py-3">
-                      <Badge variant={TYPE_BADGE[item.type]}>
-                        {TRANSACTION_TYPE_LABELS[item.type]}
-                      </Badge>
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <Badge variant={TYPE_BADGE[item.type]}>
+                          {TRANSACTION_TYPE_LABELS[item.type]}
+                        </Badge>
+                        {item.recurring && (
+                          <Badge variant="info">تکرارشونده</Badge>
+                        )}
+                      </span>
                     </td>
                     <td
                       className={cn(

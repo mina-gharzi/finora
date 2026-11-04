@@ -4,6 +4,7 @@ import type {
 } from "@finora/shared";
 import { createAccount } from "@/lib/finance/accounts";
 import { getAccountBalances } from "@/lib/finance/dashboard";
+import { ensureRecurringUpToDateSafe } from "@/lib/finance/recurring";
 import {
   authenticateMobileRequest,
   authenticateVerifiedMobileRequest,
@@ -41,6 +42,8 @@ export async function GET(request: Request) {
   if (!auth.ok) {
     return auth.response;
   }
+
+  await ensureRecurringUpToDateSafe(auth.userId);
 
   const accounts = await getAccountBalances(auth.userId);
 

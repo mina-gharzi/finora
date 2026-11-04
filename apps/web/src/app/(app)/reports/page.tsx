@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { ReportsView } from "@/components/reports/reports-view";
 import { Spinner } from "@/components/ui/spinner";
-import { requireUserId } from "@/lib/dal";
+import { ensureRecurringFresh, requireUserId } from "@/lib/dal";
 import {
   BALANCE_TREND_RANGE_PARAM,
   parseBalanceTrendRange,
@@ -32,6 +32,7 @@ async function AuthenticatedReports({
   searchParams: SearchParams;
 }) {
   const userId = await requireUserId();
+  await ensureRecurringFresh(userId);
   const params = await searchParams;
   const todayIso = todayInTehranIso();
 

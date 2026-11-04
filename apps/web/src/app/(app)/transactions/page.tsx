@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { TransactionHistoryView } from "@/components/transactions/transaction-history-view";
 import { Spinner } from "@/components/ui/spinner";
-import { requireUserId } from "@/lib/dal";
+import { ensureRecurringFresh, requireUserId } from "@/lib/dal";
 import { listAccounts } from "@/lib/finance/accounts";
 import {
   buildTransactionEditHref,
@@ -32,6 +32,7 @@ async function AuthenticatedTransactionHistory({
   searchParams: SearchParams;
 }) {
   const userId = await requireUserId();
+  await ensureRecurringFresh(userId);
   const search = await searchParams;
   const query = parseTransactionHistoryQuery(search);
 

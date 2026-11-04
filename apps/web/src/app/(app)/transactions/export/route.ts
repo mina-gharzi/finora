@@ -1,4 +1,4 @@
-import { requireUserId } from "@/lib/dal";
+import { ensureRecurringFresh, requireUserId } from "@/lib/dal";
 import {
   buildTransactionsCsvExport,
   todayIsoDate,
@@ -29,6 +29,7 @@ import { listTransactionHistoryForExport } from "@/lib/finance/transactions";
 
 export async function GET(request: Request): Promise<Response> {
   const userId = await requireUserId();
+  await ensureRecurringFresh(userId);
 
   const query = parseTransactionHistoryQuery(
     transactionSearchParamsToRecord(new URL(request.url).searchParams),

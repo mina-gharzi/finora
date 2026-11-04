@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { AccountsView } from "@/components/accounts/accounts-view";
 import { Spinner } from "@/components/ui/spinner";
-import { requireUserId } from "@/lib/dal";
+import { ensureRecurringFresh, requireUserId } from "@/lib/dal";
 import { listAccounts } from "@/lib/finance/accounts";
 import { getAccountBalances } from "@/lib/finance/dashboard";
 
@@ -12,6 +12,7 @@ export const metadata: Metadata = {
 
 async function AuthenticatedAccounts() {
   const userId = await requireUserId();
+  await ensureRecurringFresh(userId);
   const [accounts, balances] = await Promise.all([
     listAccounts(userId),
     getAccountBalances(userId),

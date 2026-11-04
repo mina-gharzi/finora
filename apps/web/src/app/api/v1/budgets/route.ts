@@ -7,6 +7,7 @@ import {
   budgetsMonthFromKey,
   parseBudgetsMonthParam,
 } from "@/lib/finance/budgets-range";
+import { ensureRecurringUpToDateSafe } from "@/lib/finance/recurring";
 import { todayInTehranIso } from "@/lib/finance/today";
 import {
   authenticateMobileRequest,
@@ -43,6 +44,8 @@ export async function GET(request: Request) {
   if (!auth.ok) {
     return auth.response;
   }
+
+  await ensureRecurringUpToDateSafe(auth.userId);
 
   const { searchParams } = new URL(request.url);
   const monthKey = parseBudgetsMonthParam(
