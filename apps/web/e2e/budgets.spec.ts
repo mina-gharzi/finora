@@ -25,7 +25,7 @@ async function seedCategory(page: Page, name: string): Promise<void> {
   await page.goto("/categories");
   await field(page, "name").fill(name);
   await page.locator('select[name="kind"]:visible').selectOption("expense");
-  await page.getByRole("button", { name: "افزودن دسته‌بندی" }).click();
+  await page.getByRole("button", { name: "افزودن دسته‌بندی", exact: true }).click();
   await expect(page.getByText("دسته‌بندی جدید با موفقیت ثبت شد.")).toBeVisible();
 }
 

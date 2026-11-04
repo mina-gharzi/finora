@@ -11,9 +11,11 @@ import { Client } from "pg";
  */
 
 function databaseUrl(): string {
-  const url = process.env.DATABASE_URL;
+  const url = process.env.E2E_DATABASE_URL;
   if (!url) {
-    throw new Error("DATABASE_URL must be set for e2e database helpers");
+    throw new Error(
+      "E2E_DATABASE_URL must be set for e2e database helpers",
+    );
   }
   return url;
 }

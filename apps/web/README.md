@@ -67,20 +67,15 @@ module), so no container or `.env` file is required for them:
 pnpm test:unit
 ```
 
-End-to-end tests need more: the container up and migrated, a production build,
-Playwright's Chromium binary, and **port 3000 free** (Playwright starts the
-server itself):
+### Running e2e
 
-```sh
-pnpm --filter @finora/web exec playwright install chromium
-pnpm test:e2e
-```
+The suite requires a dedicated database and never falls back to `DATABASE_URL`.
 
-The E2E suite runs with a single worker deliberately: registration performs
-bcrypt hashing at the production cost, and parallel workers saturate the CPU and
-make the post-registration URL wait flaky. E2E runs also force email delivery
-off for the server they spawn, so the suite can never send real email. See the
-root README's "End-to-end tests" section for details.
+1. Start a local Postgres (the dev container works).
+2. Apply migrations to that database: `DATABASE_URL=<e2e-url> pnpm db:migrate`.
+3. Export `E2E_DATABASE_URL=<e2e-url>`.
+4. Install Chromium once: `pnpm --filter @finora/web exec playwright install chromium`.
+5. Run `pnpm build`, then `pnpm test:e2e`. Stop any server on port 3000 first; Playwright starts its own.
 
 ## Build
 

@@ -37,6 +37,17 @@ export function getDatabaseUrl(): string {
   return readRequired("DATABASE_URL");
 }
 
+/**
+ * Whether registration should seed the starter categories. Enabled unless
+ * `SEED_DEFAULT_CATEGORIES` is exactly "false" (trimmed, case-insensitive), so
+ * an unset variable keeps the product default and the E2E suite can opt out.
+ */
+export function shouldSeedDefaultCategories(): boolean {
+  return (
+    process.env.SEED_DEFAULT_CATEGORIES?.trim().toLowerCase() !== "false"
+  );
+}
+
 /** Default origin used to build absolute links in outgoing emails. */
 const DEFAULT_APP_URL = "http://127.0.0.1:3000";
 

@@ -2,11 +2,16 @@
  * @vitest-environment node
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { getDatabaseUrl, getSessionSecret } from "@/lib/env";
+import {
+  getDatabaseUrl,
+  getSessionSecret,
+  shouldSeedDefaultCategories,
+} from "@/lib/env";
 
 afterEach(() => {
   delete process.env.SESSION_SECRET;
   delete process.env.DATABASE_URL;
+  delete process.env.SEED_DEFAULT_CATEGORIES;
 });
 
 describe("required environment access", () => {
@@ -37,5 +42,30 @@ describe("session secret strength", () => {
   it("accepts a secret of exactly 32 characters", () => {
     process.env.SESSION_SECRET = "a".repeat(32);
     expect(getSessionSecret()).toBe("a".repeat(32));
+  });
+});
+
+describe("default category seeding switch", () => {
+  it("is enabled when unset", () => {
+    delete process.env.SEED_DEFAULT_CATEGORIES;
+    expect(shouldSeedDefaultCategories()).toBe(true);
+  });
+
+  it("is disabled only by an explicit false", () => {
+    process.env.SEED_DEFAULT_CATEGORIES = "false";
+    expect(shouldSeedDefaultCategories()).toBe(false);
+  });
+
+  it("trims and ignores case", () => {
+    process.env.SEED_DEFAULT_CATEGORIES = "FALSE ";
+    expect(shouldSeedDefaultCategories()).toBe(false);
+  });
+
+  it("treats other values as enabled", () => {
+    process.env.SEED_DEFAULT_CATEGORIES = "0";
+    expect(shouldSeedDefaultCategories()).toBe(true);
+
+    process.env.SEED_DEFAULT_CATEGORIES = "true";
+    expect(shouldSeedDefaultCategories()).toBe(true);
   });
 });

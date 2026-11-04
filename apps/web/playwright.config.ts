@@ -17,6 +17,17 @@ try {
   // a required value is still missing.
 }
 
+// E2E tests write to the database (verification helpers, rate-limit cleanup),
+// so they must never touch the developer's DATABASE_URL. Require an explicit
+// dedicated URL rather than silently falling back to it.
+const e2eDatabaseUrl = process.env.E2E_DATABASE_URL?.trim();
+if (!e2eDatabaseUrl) {
+  throw new Error(
+    "E2E_DATABASE_URL must be set to a dedicated e2e database. " +
+      "The Playwright suite never falls back to DATABASE_URL.",
+  );
+}
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -62,7 +73,13 @@ export default defineConfig({
     // Force email delivery OFF for the spawned server, regardless of local
     // configuration (real keys, ambient env, or the EMAIL_PROVIDER=resend
     // dev opt-in) — see e2e/email-guard.ts for the mechanism and caveats.
-    env: serverEnvWithEmailDeliveryDisabled(),
+    // The server must also use the dedicated e2e database, never the
+    // developer's DATABASE_URL, and must leave starter categories to tests.
+    env: {
+      ...serverEnvWithEmailDeliveryDisabled(),
+      DATABASE_URL: e2eDatabaseUrl,
+      SEED_DEFAULT_CATEGORIES: "false",
+    },
   },
   expect: { timeout: 15_000 },
 });

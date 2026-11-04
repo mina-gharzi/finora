@@ -235,6 +235,16 @@ describe("registerAction starter categories", () => {
     );
     expect(mocks.sendInitialVerificationEmail).toHaveBeenCalled();
   });
+
+  it("skips seeding when SEED_DEFAULT_CATEGORIES is false", async () => {
+    vi.stubEnv("SEED_DEFAULT_CATEGORIES", "false");
+    mocks.findUserByEmail.mockResolvedValue(null);
+    mocks.createUser.mockResolvedValue({ id: "new" });
+
+    await expect(submit()).rejects.toThrow("NEXT_REDIRECT:/");
+
+    expect(mocks.seedDefaultCategories).not.toHaveBeenCalled();
+  });
 });
 
 describe("changePasswordAction", () => {
